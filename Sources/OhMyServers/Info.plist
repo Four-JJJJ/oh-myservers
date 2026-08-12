@@ -18,5 +18,7 @@
 	<true/>
 	<key>NSUserNotificationAlertStyle</key>
 	<string>alert</string>
+	<key>NSAppleEventsUsageDescription</key>
+	<string>用于在「终端」中打开到服务器的 SSH 连接</string>
 </dict>
 </plist>

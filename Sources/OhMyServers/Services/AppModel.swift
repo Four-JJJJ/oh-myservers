@@ -98,6 +98,49 @@ final class AppModel: ObservableObject {
         }
     }
 
+    func openInTerminal(server: ServerConfig) {
+        let command = Self.sshInvocation(for: server)
+        let source = """
+        tell application "Terminal"
+            activate
+            do script \(Self.appleScriptQuoted(command))
+        end tell
+        """
+        var errorInfo: NSDictionary?
+        guard let script = NSAppleScript(source: source) else { return }
+        script.executeAndReturnError(&errorInfo)
+        if let errorInfo {
+            NSLog("OhMyServers: openInTerminal failed: \(errorInfo)")
+        }
+    }
+
+    static func sshInvocation(for server: ServerConfig) -> String {
+        var parts: [String] = ["ssh"]
+        if server.port != 22 {
+            parts.append("-p")
+            parts.append(String(server.port))
+        }
+        if server.authMethod == .privateKey,
+           let path = server.privateKeyPath,
+           !path.isEmpty {
+            parts.append("-i")
+            parts.append(posixSingleQuoted(path))
+        }
+        parts.append(posixSingleQuoted("\(server.username)@\(server.host)"))
+        return parts.joined(separator: " ")
+    }
+
+    private static func posixSingleQuoted(_ value: String) -> String {
+        "'" + value.replacingOccurrences(of: "'", with: "'\\''") + "'"
+    }
+
+    private static func appleScriptQuoted(_ value: String) -> String {
+        let escaped = value
+            .replacingOccurrences(of: "\\", with: "\\\\")
+            .replacingOccurrences(of: "\"", with: "\\\"")
+        return "\"\(escaped)\""
+    }
+
     private func observeWake() {
         wakeObserver = NSWorkspace.shared.notificationCenter.addObserver(
             forName: NSWorkspace.didWakeNotification,

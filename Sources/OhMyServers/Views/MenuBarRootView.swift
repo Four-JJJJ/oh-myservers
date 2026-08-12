@@ -7,7 +7,6 @@ struct MenuBarRootView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            // Compact header — demo-like, minimal chrome
             HStack(spacing: 8) {
                 Image(systemName: "server.rack")
                     .font(.system(size: 12, weight: .semibold))
@@ -31,7 +30,6 @@ struct MenuBarRootView: View {
                     .padding(.horizontal, 14)
                     .padding(.bottom, 14)
             } else {
-                // Single inner card with dividers — matches Graphite demo
                 VStack(alignment: .leading, spacing: 0) {
                     ForEach(Array(model.servers.enumerated()), id: \.element.id) { index, server in
                         if index > 0 {
@@ -54,7 +52,25 @@ struct MenuBarRootView: View {
             }
 
             HStack(spacing: 16) {
-                headerButton(L10n.refresh) { model.refreshNow() }
+                HStack(spacing: 8) {
+                    if model.isRefreshing {
+                        ProgressView()
+                            .controlSize(.small)
+                            .frame(width: 12, height: 12)
+                    }
+                    headerButton(L10n.refresh, disabled: model.isRefreshing) {
+                        model.refreshNow()
+                    }
+                    if latestEnabledSnapshotDate != nil {
+                        TimelineView(.periodic(from: .now, by: 1)) { context in
+                            if let date = latestEnabledSnapshotDate {
+                                Text(MetricFormatters.relativeTime(from: date, now: context.date))
+                                    .font(.system(size: 11, weight: .medium).monospacedDigit())
+                                    .foregroundStyle(Graphite.muted)
+                            }
+                        }
+                    }
+                }
                 Spacer()
                 headerButton(L10n.quit) { NSApplication.shared.terminate(nil) }
             }
@@ -66,24 +82,39 @@ struct MenuBarRootView: View {
         .onAppear { model.refreshNow() }
     }
 
-    private func headerButton(_ title: String, action: @escaping () -> Void) -> some View {
+    private var latestEnabledSnapshotDate: Date? {
+        let enabledIDs = Set(model.servers.filter(\.isEnabled).map(\.id))
+        return model.snapshots.values
+            .filter { enabledIDs.contains($0.serverID) }
+            .map(\.collectedAt)
+            .max()
+    }
+
+    private func headerButton(
+        _ title: String,
+        disabled: Bool = false,
+        action: @escaping () -> Void
+    ) -> some View {
         Button(action: action) {
             Text(title)
                 .font(.system(size: 11, weight: .medium))
-                .foregroundStyle(Graphite.muted)
+                .foregroundStyle(Graphite.muted.opacity(disabled ? 0.4 : 1))
         }
         .buttonStyle(.borderless)
+        .disabled(disabled)
     }
 }
 
 /// One server block inside the shared demo card.
 struct ServerBlockView: View {
+    @EnvironmentObject private var model: AppModel
+
     let server: ServerConfig
     let snapshot: MetricsSnapshot?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            HStack {
+            HStack(spacing: 8) {
                 Text(server.name)
                     .font(.system(size: 12, weight: .regular))
                     .foregroundStyle(Graphite.text)
@@ -91,18 +122,46 @@ struct ServerBlockView: View {
                 Text(statusText)
                     .font(.system(size: 12, weight: .regular))
                     .foregroundStyle(statusColor)
+                Button(action: { model.openInTerminal(server: server) }) {
+                    Text(L10n.terminal)
+                        .font(.system(size: 11, weight: .medium))
+                        .foregroundStyle(Graphite.muted)
+                }
+                .buttonStyle(.borderless)
             }
 
             if let snapshot, snapshot.isReachable {
-                VStack(spacing: 6) {
-                    HStack(spacing: 0) {
-                        demoMetric(L10n.cpu, cpuText(snapshot))
-                        demoMetric(L10n.mem, memText(snapshot))
-                    }
-                    HStack(spacing: 0) {
-                        demoMetric(L10n.load, loadText(snapshot))
-                        demoMetric(L10n.disk, diskText(snapshot))
-                    }
+                VStack(alignment: .leading, spacing: 8) {
+                    metricRow(
+                        L10n.cpu,
+                        cpuText(snapshot),
+                        fraction: MetricFormatters.barFraction(percent: snapshot.cpuPercent),
+                        fill: MetricFormatters.barFill(percent: snapshot.cpuPercent, highThreshold: 85)
+                    )
+                    metricRow(
+                        L10n.mem,
+                        MetricFormatters.usageText(
+                            used: snapshot.memoryUsedBytes,
+                            total: snapshot.memoryTotalBytes,
+                            percent: snapshot.memoryUsedPercent
+                        ),
+                        fraction: MetricFormatters.barFraction(percent: snapshot.memoryUsedPercent),
+                        fill: MetricFormatters.barFill(percent: snapshot.memoryUsedPercent, highThreshold: 90)
+                    )
+                    metricRow(
+                        L10n.disk,
+                        MetricFormatters.usageText(
+                            used: snapshot.diskUsedBytes,
+                            total: snapshot.diskTotalBytes,
+                            percent: snapshot.diskUsedPercent
+                        ),
+                        fraction: MetricFormatters.barFraction(percent: MetricFormatters.diskPercent(snapshot)),
+                        fill: MetricFormatters.barFill(
+                            percent: MetricFormatters.diskPercent(snapshot),
+                            highThreshold: 90
+                        )
+                    )
+                    loadRow(snapshot)
                     HStack(spacing: 0) {
                         demoMetric(L10n.netIn, netRxText(snapshot))
                         demoMetric(L10n.netOut, netTxText(snapshot))
@@ -139,6 +198,33 @@ struct ServerBlockView: View {
         }
     }
 
+    private func metricRow(_ label: String, _ value: String, fraction: Double?, fill: Color) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack(spacing: 4) {
+                Text(label)
+                    .foregroundStyle(Graphite.muted)
+                Text(value)
+                    .fontWeight(.semibold)
+                    .foregroundStyle(Graphite.text)
+                Spacer(minLength: 0)
+            }
+            .font(.system(size: 12).monospacedDigit())
+            MetricBar(fraction: fraction, fill: fill)
+        }
+    }
+
+    private func loadRow(_ snapshot: MetricsSnapshot) -> some View {
+        HStack(spacing: 4) {
+            Text(L10n.load)
+                .foregroundStyle(Graphite.muted)
+            Text(MetricFormatters.loadText(snapshot))
+                .fontWeight(.semibold)
+                .foregroundStyle(MetricFormatters.loadColor(load1: snapshot.load1, cpuCount: snapshot.cpuCount))
+            Spacer(minLength: 0)
+        }
+        .font(.system(size: 12).monospacedDigit())
+    }
+
     private func demoMetric(_ label: String, _ value: String) -> some View {
         HStack(spacing: 4) {
             Text(label)
@@ -154,24 +240,6 @@ struct ServerBlockView: View {
 
     private func cpuText(_ s: MetricsSnapshot) -> String {
         guard let v = s.cpuPercent else { return "—" }
-        return "\(Int(v.rounded()))%"
-    }
-
-    private func memText(_ s: MetricsSnapshot) -> String {
-        guard let v = s.memoryUsedPercent else { return "—" }
-        return "\(Int(v.rounded()))%"
-    }
-
-    private func loadText(_ s: MetricsSnapshot) -> String {
-        guard let a = s.load1, let b = s.load5, let c = s.load15 else {
-            if let a = s.load1 { return String(format: "%.2f", a) }
-            return "—"
-        }
-        return String(format: "%.2f/%.2f/%.2f", a, b, c)
-    }
-
-    private func diskText(_ s: MetricsSnapshot) -> String {
-        guard let v = s.diskUsedPercent else { return "—" }
         return "\(Int(v.rounded()))%"
     }
 
@@ -198,5 +266,25 @@ struct ServerBlockView: View {
         if bytesPerSec >= 1_000_000 { return String(format: "%.1fM", bytesPerSec / 1_000_000) }
         if bytesPerSec >= 1_000 { return String(format: "%.1fK", bytesPerSec / 1_000) }
         return String(format: "%.0fB", bytesPerSec)
+    }
+}
+
+private struct MetricBar: View {
+    let fraction: Double?
+    let fill: Color
+
+    var body: some View {
+        GeometryReader { proxy in
+            ZStack(alignment: .leading) {
+                Capsule()
+                    .fill(Graphite.field)
+                if let fraction {
+                    Capsule()
+                        .fill(fill)
+                        .frame(width: proxy.size.width * fraction)
+                }
+            }
+        }
+        .frame(height: 3)
     }
 }

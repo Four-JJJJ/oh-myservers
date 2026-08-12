@@ -59,4 +59,8 @@ enum L10n {
     static let keyRequired = "请填写私钥路径"
     static let authPassword = "密码登录"
     static let authKey = "密钥登录"
+    static let terminal = "终端"
+    static let justNow = "刚刚"
+    static let secondsAgo = "秒前"
+    static let minutesAgo = "分钟前"
 }
