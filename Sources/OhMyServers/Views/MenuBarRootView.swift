@@ -26,14 +26,16 @@ struct MenuBarRootView: View {
                 Button("Settings") {
                     SettingsWindow.present(model: model)
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(.borderless)
                 .foregroundStyle(Graphite.muted)
                 .font(.system(size: 12))
             }
             .padding(.horizontal, 14)
             .padding(.vertical, 12)
 
-            Divider().background(Graphite.divider)
+            Rectangle()
+                .fill(Graphite.divider)
+                .frame(height: 1)
 
             if model.servers.isEmpty {
                 Text("No servers yet. Open Settings to add one.")
@@ -41,42 +43,44 @@ struct MenuBarRootView: View {
                     .foregroundStyle(Graphite.muted)
                     .padding(16)
             } else {
-                ScrollView {
-                    VStack(spacing: 10) {
-                        ForEach(model.servers) { server in
-                            ServerRowView(
-                                server: server,
-                                snapshot: model.snapshots[server.id]
-                            )
-                        }
+                VStack(spacing: 10) {
+                    ForEach(model.servers) { server in
+                        ServerRowView(
+                            server: server,
+                            snapshot: model.snapshots[server.id]
+                        )
                     }
-                    .padding(12)
                 }
+                .padding(12)
             }
 
-            Divider().background(Graphite.divider)
+            Rectangle()
+                .fill(Graphite.divider)
+                .frame(height: 1)
 
             HStack {
                 Button("Refresh now") {
-                    // Next poll cycle is ≤15s; restart monitoring for immediacy.
-                    model.startMonitoring()
+                    model.refreshNow()
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(.borderless)
                 .font(.system(size: 12))
                 .foregroundStyle(Graphite.muted)
                 Spacer()
                 Button("Quit") {
                     NSApplication.shared.terminate(nil)
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(.borderless)
                 .font(.system(size: 12))
                 .foregroundStyle(Graphite.muted)
             }
             .padding(.horizontal, 14)
             .padding(.vertical, 10)
         }
-        .frame(width: 340)
+        .frame(width: 360)
         .background(Graphite.bg)
+        .onAppear {
+            model.refreshNow()
+        }
     }
 }
 
@@ -85,11 +89,16 @@ struct ServerRowView: View {
     let snapshot: MetricsSnapshot?
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack {
-                Text(server.name)
-                    .font(.system(size: 13, weight: .medium))
-                    .foregroundStyle(Graphite.text)
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(alignment: .firstTextBaseline) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(server.name)
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(Graphite.text)
+                    Text("\(server.label) · \(server.host)")
+                        .font(.system(size: 10).monospacedDigit())
+                        .foregroundStyle(Graphite.muted)
+                }
                 Spacer()
                 Text(statusText)
                     .font(.system(size: 11, weight: .semibold))
@@ -97,23 +106,31 @@ struct ServerRowView: View {
             }
 
             if let snapshot, snapshot.isReachable {
-                LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 6) {
-                    metric("CPU", cpuText(snapshot))
-                    metric("MEM", memText(snapshot))
-                    metric("Load", loadText(snapshot))
-                    metric("Disk", diskText(snapshot))
-                    metric("Net", netText(snapshot))
-                    metric("Up", uptimeText(snapshot))
+                // Avoid LazyVGrid inside MenuBarExtra — it often collapses to zero height.
+                VStack(spacing: 6) {
+                    metricRow(("CPU", cpuText(snapshot)), ("MEM", memText(snapshot)))
+                    metricRow(("Load", loadText(snapshot)), ("Disk", diskText(snapshot)))
+                    metricRow(("Net ↓", netRxText(snapshot)), ("Net ↑", netTxText(snapshot)))
+                    metricRow(("Up", uptimeText(snapshot)), ("Host", server.host))
                 }
             } else {
                 Text(snapshot?.errorMessage ?? "Waiting for first sample…")
                     .font(.system(size: 11))
                     .foregroundStyle(Graphite.muted)
+                    .fixedSize(horizontal: false, vertical: true)
             }
         }
         .padding(12)
+        .frame(maxWidth: .infinity, alignment: .leading)
         .background(Graphite.card)
         .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+    }
+
+    private func metricRow(_ left: (String, String), _ right: (String, String)) -> some View {
+        HStack(spacing: 12) {
+            metric(left.0, left.1)
+            metric(right.0, right.1)
+        }
     }
 
     private var statusText: String {
@@ -141,9 +158,11 @@ struct ServerRowView: View {
             Text(value)
                 .foregroundStyle(Graphite.text)
                 .fontWeight(.semibold)
+                .lineLimit(1)
             Spacer(minLength: 0)
         }
         .font(.system(size: 11).monospacedDigit())
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     private func cpuText(_ s: MetricsSnapshot) -> String {
@@ -157,8 +176,11 @@ struct ServerRowView: View {
     }
 
     private func loadText(_ s: MetricsSnapshot) -> String {
-        guard let a = s.load1 else { return "—" }
-        return String(format: "%.2f", a)
+        guard let a = s.load1, let b = s.load5, let c = s.load15 else {
+            if let a = s.load1 { return String(format: "%.2f", a) }
+            return "—"
+        }
+        return String(format: "%.2f/%.2f/%.2f", a, b, c)
     }
 
     private func diskText(_ s: MetricsSnapshot) -> String {
@@ -166,9 +188,14 @@ struct ServerRowView: View {
         return "\(Int(v.rounded()))%"
     }
 
-    private func netText(_ s: MetricsSnapshot) -> String {
+    private func netRxText(_ s: MetricsSnapshot) -> String {
         guard let rx = s.netRxBytesPerSec else { return "—" }
-        return "↓\(formatRate(rx))"
+        return formatRate(rx)
+    }
+
+    private func netTxText(_ s: MetricsSnapshot) -> String {
+        guard let tx = s.netTxBytesPerSec else { return "—" }
+        return formatRate(tx)
     }
 
     private func uptimeText(_ s: MetricsSnapshot) -> String {

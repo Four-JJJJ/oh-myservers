@@ -39,6 +39,10 @@ public actor PollScheduler {
         task = nil
     }
 
+    public func refresh(servers: [ServerConfig]) async {
+        await pollOnce(servers: servers)
+    }
+
     public func currentSnapshots() -> [UUID: MetricsSnapshot] {
         latest
     }

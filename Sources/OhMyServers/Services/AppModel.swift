@@ -54,6 +54,7 @@ final class AppModel: ObservableObject {
     func startMonitoring() {
         let credentials = self.credentials
         let serverList = self.serverList
+        let existing = scheduler
         let scheduler = PollScheduler(
             collector: ProcessSSHCollector(),
             intervalSeconds: 15
@@ -62,6 +63,7 @@ final class AppModel: ObservableObject {
         }
         self.scheduler = scheduler
         Task {
+            await existing?.stop()
             await scheduler.start(
                 serversProvider: { serverList.get() },
                 onUpdate: { [weak self] snaps, events in
@@ -75,6 +77,13 @@ final class AppModel: ObservableObject {
                     }
                 }
             )
+        }
+    }
+
+    func refreshNow() {
+        let servers = serverList.get()
+        Task {
+            await scheduler?.refresh(servers: servers)
         }
     }
 
