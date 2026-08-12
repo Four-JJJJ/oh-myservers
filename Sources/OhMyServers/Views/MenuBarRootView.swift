@@ -61,7 +61,7 @@ struct MenuBarRootView: View {
             .padding(.horizontal, 14)
             .padding(.bottom, 12)
         }
-        .frame(width: 300)
+        .frame(width: 320)
         .background(Graphite.bg)
         .onAppear { model.refreshNow() }
     }
@@ -94,15 +94,22 @@ struct ServerBlockView: View {
             }
 
             if let snapshot, snapshot.isReachable {
-                // Demo 2×2: CPU / MEM / Disk / Net
                 VStack(spacing: 6) {
                     HStack(spacing: 0) {
                         demoMetric(L10n.cpu, cpuText(snapshot))
                         demoMetric(L10n.mem, memText(snapshot))
                     }
                     HStack(spacing: 0) {
+                        demoMetric(L10n.load, loadText(snapshot))
                         demoMetric(L10n.disk, diskText(snapshot))
-                        demoMetric(L10n.net, netText(snapshot))
+                    }
+                    HStack(spacing: 0) {
+                        demoMetric(L10n.netIn, netRxText(snapshot))
+                        demoMetric(L10n.netOut, netTxText(snapshot))
+                    }
+                    HStack(spacing: 0) {
+                        demoMetric(L10n.uptime, uptimeText(snapshot))
+                        Color.clear.frame(maxWidth: .infinity)
                     }
                 }
             } else {
@@ -155,14 +162,36 @@ struct ServerBlockView: View {
         return "\(Int(v.rounded()))%"
     }
 
+    private func loadText(_ s: MetricsSnapshot) -> String {
+        guard let a = s.load1, let b = s.load5, let c = s.load15 else {
+            if let a = s.load1 { return String(format: "%.2f", a) }
+            return "—"
+        }
+        return String(format: "%.2f/%.2f/%.2f", a, b, c)
+    }
+
     private func diskText(_ s: MetricsSnapshot) -> String {
         guard let v = s.diskUsedPercent else { return "—" }
         return "\(Int(v.rounded()))%"
     }
 
-    private func netText(_ s: MetricsSnapshot) -> String {
+    private func netRxText(_ s: MetricsSnapshot) -> String {
         guard let rx = s.netRxBytesPerSec else { return "—" }
         return "↓\(formatRate(rx))"
+    }
+
+    private func netTxText(_ s: MetricsSnapshot) -> String {
+        guard let tx = s.netTxBytesPerSec else { return "—" }
+        return "↑\(formatRate(tx))"
+    }
+
+    private func uptimeText(_ s: MetricsSnapshot) -> String {
+        guard let sec = s.uptimeSeconds else { return "—" }
+        let days = sec / 86_400
+        let hours = (sec % 86_400) / 3600
+        if days > 0 { return "\(days)天\(hours)时" }
+        let mins = (sec % 3600) / 60
+        return "\(hours)时\(mins)分"
     }
 
     private func formatRate(_ bytesPerSec: Double) -> String {
