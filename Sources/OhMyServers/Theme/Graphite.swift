@@ -63,4 +63,18 @@ enum L10n {
     static let justNow = "刚刚"
     static let secondsAgo = "秒前"
     static let minutesAgo = "分钟前"
+    static let monitoring = "监控"
+    static let pollInterval = "刷新间隔"
+    static let launchAtLogin = "开机自启"
+    static let launchAtLoginFailed = "无法设置开机自启，请在系统设置中允许"
+    static let cancel = "取消"
+    static let unsaved = "未保存"
+
+    static func pollIntervalOption(_ seconds: Int) -> String {
+        "\(seconds) 秒"
+    }
+
+    static func deleteConfirm(_ name: String) -> String {
+        "确定删除「\(name)」？此操作不可撤销。"
+    }
 }

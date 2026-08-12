@@ -15,6 +15,14 @@ struct SettingsView: View {
     @State private var keyPassphrase = ""
     @State private var editingID: UUID?
     @State private var errorMessage: String?
+    @State private var unsavedDraft: ServerConfig?
+    @State private var unsavedPassword = ""
+    @State private var unsavedKeyPassphrase = ""
+    @State private var showDeleteConfirm = false
+    @State private var pendingDeleteID: UUID?
+    @State private var pendingDeleteName = ""
+    @State private var launchAtLoginEnabled = LaunchAtLogin.isEnabled
+    @State private var launchAtLoginError: String?
 
     var body: some View {
         HStack(spacing: 0) {
@@ -28,6 +36,25 @@ struct SettingsView: View {
         }
         .background(Graphite.bg)
         .preferredColorScheme(.dark)
+        .onAppear(perform: selectFirstServerIfNeeded)
+        .confirmationDialog(
+            L10n.deleteConfirm(pendingDeleteName),
+            isPresented: $showDeleteConfirm,
+            titleVisibility: .visible
+        ) {
+            Button(L10n.delete, role: .destructive) {
+                confirmDeleteSaved()
+            }
+            Button(L10n.cancel, role: .cancel) {}
+        }
+    }
+
+    private var sidebarItems: [ServerConfig] {
+        var items = model.servers
+        if let unsaved = unsavedDraft, !items.contains(where: { $0.id == unsaved.id }) {
+            items.append(editingID == unsaved.id ? draft : unsaved)
+        }
+        return items
     }
 
     private var sidebar: some View {
@@ -44,7 +71,7 @@ struct SettingsView: View {
             .padding(.top, 18)
             .padding(.bottom, 12)
 
-            if model.servers.isEmpty {
+            if sidebarItems.isEmpty {
                 Text(L10n.noServers)
                     .font(.system(size: 12))
                     .foregroundStyle(Graphite.muted)
@@ -53,13 +80,9 @@ struct SettingsView: View {
             } else {
                 ScrollView {
                     VStack(spacing: 6) {
-                        ForEach(model.servers) { server in
+                        ForEach(sidebarItems) { server in
                             Button {
-                                editingID = server.id
-                                draft = server
-                                password = ""
-                                keyPassphrase = ""
-                                errorMessage = nil
+                                selectItem(id: server.id)
                             } label: {
                                 HStack(spacing: 10) {
                                     Circle()
@@ -70,7 +93,7 @@ struct SettingsView: View {
                                             .font(.system(size: 12, weight: .semibold))
                                             .foregroundStyle(Graphite.text)
                                             .lineLimit(1)
-                                        Text(server.label)
+                                        Text(subtitle(for: server))
                                             .font(.system(size: 10, weight: .medium).monospacedDigit())
                                             .foregroundStyle(Graphite.muted)
                                     }
@@ -92,6 +115,10 @@ struct SettingsView: View {
 
             Spacer(minLength: 0)
 
+            monitorSection
+                .padding(.horizontal, 12)
+                .padding(.bottom, 8)
+
             HStack(spacing: 8) {
                 Button {
                     addServer()
@@ -101,7 +128,7 @@ struct SettingsView: View {
                 .buttonStyle(.plain)
 
                 Button {
-                    deleteSelected()
+                    requestDeleteSelected()
                 } label: {
                     labelChip(L10n.delete, systemImage: "trash", destructive: true)
                 }
@@ -114,9 +141,55 @@ struct SettingsView: View {
         .background(Graphite.bgElevated)
     }
 
+    private var monitorSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            sectionTitle(L10n.monitoring)
+            VStack(alignment: .leading, spacing: 6) {
+                Text(L10n.pollInterval)
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundStyle(Graphite.muted)
+                Picker(L10n.pollInterval, selection: Binding(
+                    get: { model.pollIntervalSeconds },
+                    set: { model.updatePollInterval($0) }
+                )) {
+                    ForEach(AppModel.allowedPollIntervals, id: \.self) { seconds in
+                        Text(L10n.pollIntervalOption(Int(seconds))).tag(seconds)
+                    }
+                }
+                .labelsHidden()
+                .pickerStyle(.menu)
+                .tint(Graphite.text)
+            }
+
+            Toggle(isOn: Binding(
+                get: { launchAtLoginEnabled },
+                set: { applyLaunchAtLogin($0) }
+            )) {
+                Text(L10n.launchAtLogin)
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundStyle(Graphite.text)
+            }
+            .toggleStyle(.switch)
+            .tint(Graphite.accent)
+            .controlSize(.small)
+
+            if let launchAtLoginError {
+                Text(launchAtLoginError)
+                    .font(.system(size: 11))
+                    .foregroundStyle(Graphite.offline)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .padding(10)
+        .background(
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .fill(Graphite.field.opacity(0.45))
+        )
+    }
+
     private var editorPane: some View {
         Group {
-            if editingID == nil && draft.host.isEmpty && draft.name.isEmpty {
+            if editingID == nil {
                 VStack(spacing: 10) {
                     Image(systemName: "slider.horizontal.3")
                         .font(.system(size: 28, weight: .light))
@@ -124,6 +197,12 @@ struct SettingsView: View {
                     Text(L10n.selectServer)
                         .font(.system(size: 13))
                         .foregroundStyle(Graphite.muted)
+                    if let errorMessage {
+                        Text(errorMessage)
+                            .font(.system(size: 12))
+                            .foregroundStyle(Graphite.offline)
+                            .padding(.top, 4)
+                    }
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
@@ -217,6 +296,14 @@ struct SettingsView: View {
         !draft.name.isEmpty && !draft.host.isEmpty && !draft.username.isEmpty && !draft.label.isEmpty
     }
 
+    private func isUnsavedDraft(_ id: UUID) -> Bool {
+        unsavedDraft?.id == id && !model.servers.contains(where: { $0.id == id })
+    }
+
+    private func subtitle(for server: ServerConfig) -> String {
+        isUnsavedDraft(server.id) ? L10n.unsaved : server.label
+    }
+
     private func sectionTitle(_ title: String) -> some View {
         Text(title)
             .font(.system(size: 11, weight: .semibold))
@@ -291,7 +378,40 @@ struct SettingsView: View {
         .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
     }
 
+    private func selectFirstServerIfNeeded() {
+        guard editingID == nil, let first = model.servers.first else { return }
+        selectItem(id: first.id)
+    }
+
+    private func stashDraftIfNeeded() {
+        guard let unsaved = unsavedDraft, editingID == unsaved.id else { return }
+        unsavedDraft = draft
+        unsavedPassword = password
+        unsavedKeyPassphrase = keyPassphrase
+    }
+
+    private func selectItem(id: UUID) {
+        stashDraftIfNeeded()
+        editingID = id
+        errorMessage = nil
+        if unsavedDraft?.id == id {
+            draft = unsavedDraft ?? draft
+            password = unsavedPassword
+            keyPassphrase = unsavedKeyPassphrase
+            return
+        }
+        if let server = model.servers.first(where: { $0.id == id }) {
+            draft = server
+            password = ""
+            keyPassphrase = ""
+        }
+    }
+
     private func addServer() {
+        if let existing = unsavedDraft {
+            selectItem(id: existing.id)
+            return
+        }
         let fresh = ServerConfig(
             name: "新服务器",
             host: "",
@@ -299,6 +419,7 @@ struct SettingsView: View {
             label: "NEW",
             authMethod: .privateKey
         )
+        unsavedDraft = fresh
         draft = fresh
         editingID = fresh.id
         password = ""
@@ -306,13 +427,68 @@ struct SettingsView: View {
         errorMessage = nil
     }
 
-    private func deleteSelected() {
+    private func requestDeleteSelected() {
         guard let id = editingID else { return }
+        if isUnsavedDraft(id) {
+            discardDraft()
+            return
+        }
+        pendingDeleteID = id
+        pendingDeleteName = draft.name.isEmpty
+            ? (model.servers.first(where: { $0.id == id })?.name ?? "")
+            : draft.name
+        showDeleteConfirm = true
+    }
+
+    private func confirmDeleteSaved() {
+        guard let id = pendingDeleteID else { return }
+        pendingDeleteID = nil
         try? model.delete(serverID: id)
+        if unsavedDraft?.id == id {
+            unsavedDraft = nil
+            unsavedPassword = ""
+            unsavedKeyPassphrase = ""
+        }
         editingID = nil
+        resetEditor()
+        if let first = sidebarItems.first {
+            selectItem(id: first.id)
+        }
+    }
+
+    private func discardDraft() {
+        unsavedDraft = nil
+        unsavedPassword = ""
+        unsavedKeyPassphrase = ""
+        editingID = nil
+        resetEditor()
+        if let first = model.servers.first {
+            selectItem(id: first.id)
+        }
+    }
+
+    private func resetEditor() {
         draft = ServerConfig(name: "", host: "", username: "", label: "", authMethod: .password)
         password = ""
         keyPassphrase = ""
+        errorMessage = nil
+    }
+
+    private func applyLaunchAtLogin(_ enabled: Bool) {
+        do {
+            try LaunchAtLogin.setEnabled(enabled)
+            launchAtLoginEnabled = LaunchAtLogin.isEnabled
+            if enabled && !launchAtLoginEnabled {
+                launchAtLoginError = L10n.launchAtLoginFailed
+                errorMessage = L10n.launchAtLoginFailed
+            } else {
+                launchAtLoginError = nil
+            }
+        } catch {
+            launchAtLoginEnabled = LaunchAtLogin.isEnabled
+            launchAtLoginError = L10n.launchAtLoginFailed
+            errorMessage = L10n.launchAtLoginFailed
+        }
     }
 
     private func browseKey() {
@@ -351,6 +527,11 @@ struct SettingsView: View {
                 password: password.isEmpty ? nil : password,
                 keyPassphrase: keyPassphrase.isEmpty ? nil : keyPassphrase
             )
+            if unsavedDraft?.id == draft.id {
+                unsavedDraft = nil
+                unsavedPassword = ""
+                unsavedKeyPassphrase = ""
+            }
             editingID = draft.id
             password = ""
             keyPassphrase = ""

@@ -5,3 +5,7 @@ DerivedData/
 xcuserdata/
 .DS_Store
 OhMyServers.app/
+*.iconset/
+Resources/*.png
+__pycache__/
+*.pyc

@@ -26,6 +26,8 @@ final class AppModel: ObservableObject {
     @Published var menuBarTitle: String = "No servers"
     @Published var showSettings = false
     @Published var isRefreshing = false
+    static let allowedPollIntervals: [Double] = [5, 15, 30, 60]
+
     @Published var pollIntervalSeconds: Double = 15
 
     private let store: ServerStore
@@ -153,12 +155,21 @@ final class AppModel: ObservableObject {
         }
     }
 
-    private static func resolvedPollIntervalSeconds() -> Double {
+    func updatePollInterval(_ seconds: Double) {
+        let value = Self.normalizedPollInterval(seconds)
+        pollIntervalSeconds = value
+        UserDefaults.standard.set(value, forKey: "pollIntervalSeconds")
+        Task { await scheduler?.setIntervalSeconds(value) }
+    }
+
+    static func resolvedPollIntervalSeconds() -> Double {
         let defaults = UserDefaults.standard
         guard defaults.object(forKey: "pollIntervalSeconds") != nil else { return 15 }
-        let value = defaults.double(forKey: "pollIntervalSeconds")
-        guard value.isFinite, value > 0 else { return 15 }
-        return value
+        return normalizedPollInterval(defaults.double(forKey: "pollIntervalSeconds"))
+    }
+
+    static func normalizedPollInterval(_ seconds: Double) -> Double {
+        allowedPollIntervals.contains(seconds) ? seconds : 15
     }
 
     func reloadServersFromDisk() {
