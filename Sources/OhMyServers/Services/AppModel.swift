@@ -1,3 +1,4 @@
+import AppKit
 import Foundation
 import OhMyServersCore
 import Combine
@@ -24,6 +25,8 @@ final class AppModel: ObservableObject {
     @Published var snapshots: [UUID: MetricsSnapshot] = [:]
     @Published var menuBarTitle: String = "No servers"
     @Published var showSettings = false
+    @Published var isRefreshing = false
+    @Published var pollIntervalSeconds: Double = 15
 
     private let store: ServerStore
     private let credentials: CredentialStore
@@ -31,6 +34,7 @@ final class AppModel: ObservableObject {
     private let notifications = NotificationService()
     private let serverList = ServerListBox()
     private var scheduler: PollScheduler?
+    private var wakeObserver: NSObjectProtocol?
 
     init() {
         do {
@@ -42,8 +46,10 @@ final class AppModel: ObservableObject {
         credentials = CredentialStore()
         servers = store.list()
         serverList.set(servers)
+        pollIntervalSeconds = Self.resolvedPollIntervalSeconds()
         refreshTitle()
         startMonitoring()
+        observeWake()
         Task { await notifications.requestAuthorization() }
     }
 
@@ -57,7 +63,7 @@ final class AppModel: ObservableObject {
         let existing = scheduler
         let scheduler = PollScheduler(
             collector: ProcessSSHCollector(),
-            intervalSeconds: 15
+            intervalSeconds: pollIntervalSeconds
         ) { server in
             Self.credential(for: server, credentials: credentials)
         }
@@ -75,6 +81,11 @@ final class AppModel: ObservableObject {
                             self.notifications.post(title: event.title, body: event.body)
                         }
                     }
+                },
+                onRefreshing: { [weak self] refreshing in
+                    Task { @MainActor in
+                        self?.isRefreshing = refreshing
+                    }
                 }
             )
         }
@@ -85,6 +96,26 @@ final class AppModel: ObservableObject {
         Task {
             await scheduler?.refresh(servers: servers)
         }
+    }
+
+    private func observeWake() {
+        wakeObserver = NSWorkspace.shared.notificationCenter.addObserver(
+            forName: NSWorkspace.didWakeNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor in
+                self?.refreshNow()
+            }
+        }
+    }
+
+    private static func resolvedPollIntervalSeconds() -> Double {
+        let defaults = UserDefaults.standard
+        guard defaults.object(forKey: "pollIntervalSeconds") != nil else { return 15 }
+        let value = defaults.double(forKey: "pollIntervalSeconds")
+        guard value.isFinite, value > 0 else { return 15 }
+        return value
     }
 
     func reloadServersFromDisk() {

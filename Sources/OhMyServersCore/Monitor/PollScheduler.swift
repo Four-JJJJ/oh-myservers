@@ -8,6 +8,8 @@ public actor PollScheduler {
     private var latest: [UUID: MetricsSnapshot] = [:]
     private var previous: [UUID: MetricsSnapshot] = [:]
     private var onUpdate: (@Sendable ([UUID: MetricsSnapshot], [AlertEvent]) -> Void)?
+    private var onRefreshing: (@Sendable (Bool) -> Void)?
+    private var isPolling = false
 
     public init(
         collector: any SSHCollecting,
@@ -15,21 +17,33 @@ public actor PollScheduler {
         credentialProvider: @escaping @Sendable (ServerConfig) -> SSHCredential?
     ) {
         self.collector = collector
-        self.intervalNanoseconds = UInt64(intervalSeconds * 1_000_000_000)
+        self.intervalNanoseconds = Self.nanoseconds(forIntervalSeconds: intervalSeconds)
         self.credentialProvider = credentialProvider
+    }
+
+    public func setIntervalSeconds(_ seconds: Double) {
+        intervalNanoseconds = Self.nanoseconds(forIntervalSeconds: seconds)
     }
 
     public func start(
         serversProvider: @escaping @Sendable () -> [ServerConfig],
-        onUpdate: @escaping @Sendable ([UUID: MetricsSnapshot], [AlertEvent]) -> Void
+        onUpdate: @escaping @Sendable ([UUID: MetricsSnapshot], [AlertEvent]) -> Void,
+        onRefreshing: (@Sendable (Bool) -> Void)? = nil
     ) {
         stop()
         self.onUpdate = onUpdate
+        self.onRefreshing = onRefreshing
         task = Task {
             while !Task.isCancelled {
+                let started = ContinuousClock.now
                 let servers = serversProvider()
                 await self.pollOnce(servers: servers)
-                try? await Task.sleep(nanoseconds: self.intervalNanoseconds)
+                let elapsed = ContinuousClock.now - started
+                let interval = Duration.nanoseconds(Int64(clamping: self.intervalNanoseconds))
+                let remaining = interval - elapsed
+                if remaining > .zero {
+                    try? await Task.sleep(for: remaining)
+                }
             }
         }
     }
@@ -48,6 +62,14 @@ public actor PollScheduler {
     }
 
     func pollOnce(servers: [ServerConfig]) async {
+        if isPolling { return }
+        isPolling = true
+        onRefreshing?(true)
+        defer {
+            isPolling = false
+            onRefreshing?(false)
+        }
+
         let enabled = servers.filter(\.isEnabled)
         var next: [UUID: MetricsSnapshot] = [:]
 
@@ -71,5 +93,12 @@ public actor PollScheduler {
 
         let events = AlertEvaluator().evaluate(servers: enabled, previous: prev, current: next)
         onUpdate?(next, events)
+    }
+
+    private static func nanoseconds(forIntervalSeconds seconds: Double) -> UInt64 {
+        guard seconds.isFinite, seconds > 0 else { return 0 }
+        let nanos = seconds * 1_000_000_000
+        guard nanos < Double(UInt64.max) else { return UInt64.max }
+        return UInt64(nanos)
     }
 }
