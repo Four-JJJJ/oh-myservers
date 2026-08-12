@@ -20,7 +20,7 @@ public enum RemoteMetricScripts {
     echo '___PROC_UPTIME___'
     cat /proc/uptime
     echo '___DF___'
-    df -BP /
+    df -Pk /
     echo '___END___'
     """#
 

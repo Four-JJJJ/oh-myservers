@@ -102,6 +102,6 @@ CredentialStore (Keychain) + ServerStore (本地配置)
 ## 9. 技术选型
 
 - 语言/UI：Swift / SwiftUI，macOS 14+
-- SSH：Swift 侧 SSH 客户端库（实现计划中锁定具体依赖）或等价可靠方案
+- SSH：本机 `/usr/bin/ssh`（与系统 SSH 配置一致；避免 NIOSSH 与新版 OpenSSH 密钥交换不兼容）
 - 采集：SSH + Linux `/proc` / `df` 等，服务器零安装
 - 发布：本地构建；可选 GitHub Releases + 自行签名说明

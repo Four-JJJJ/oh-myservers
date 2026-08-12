@@ -55,7 +55,7 @@ final class AppModel: ObservableObject {
         let credentials = self.credentials
         let serverList = self.serverList
         let scheduler = PollScheduler(
-            collector: CitadelSSHCollector(),
+            collector: ProcessSSHCollector(),
             intervalSeconds: 15
         ) { server in
             Self.credential(for: server, credentials: credentials)

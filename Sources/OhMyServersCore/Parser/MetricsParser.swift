@@ -156,7 +156,9 @@ public enum MetricsParser {
         return (max(0, rx), max(0, tx))
     }
 
+    /// Prefer physical NICs (eth*/en*/ens*/enp*) over docker bridges when ranking.
     private static func primaryInterfaceCounters(from netDev: String) -> (rx: UInt64, tx: UInt64)? {
+        var preferred: (name: String, rx: UInt64, tx: UInt64)?
         var best: (name: String, rx: UInt64, tx: UInt64)?
         for line in netDev.split(separator: "\n") {
             let trimmed = line.trimmingCharacters(in: .whitespaces)
@@ -165,15 +167,21 @@ public enum MetricsParser {
             if name == "lo" || name.hasPrefix("Inter") || name.hasPrefix("face") { continue }
             let rest = trimmed[trimmed.index(after: colon)...]
             let nums = rest.split(whereSeparator: \.isWhitespace).compactMap { UInt64($0) }
-            // rx_bytes packets errs drop fifo frame compressed multicast tx_bytes ...
             guard nums.count >= 9 else { continue }
             let rx = nums[0]
             let tx = nums[8]
+            let candidate = (String(name), rx, tx)
+            if name.hasPrefix("eth") || name.hasPrefix("en") || name.hasPrefix("ens") || name.hasPrefix("enp") {
+                if preferred == nil || rx + tx > preferred!.rx + preferred!.tx {
+                    preferred = candidate
+                }
+            }
             if best == nil || rx + tx > best!.rx + best!.tx {
-                best = (String(name), rx, tx)
+                best = candidate
             }
         }
-        guard let best else { return nil }
-        return (best.rx, best.tx)
+        let chosen = preferred ?? best
+        guard let chosen else { return nil }
+        return (chosen.rx, chosen.tx)
     }
 }

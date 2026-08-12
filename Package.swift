@@ -8,15 +8,10 @@ let package = Package(
         .library(name: "OhMyServersCore", targets: ["OhMyServersCore"]),
         .executable(name: "OhMyServers", targets: ["OhMyServers"])
     ],
-    dependencies: [
-        .package(url: "https://github.com/orlandos-nl/Citadel.git", from: "0.7.0")
-    ],
     targets: [
         .target(
             name: "OhMyServersCore",
-            dependencies: [
-                .product(name: "Citadel", package: "Citadel")
-            ]
+            dependencies: []
         ),
         .executableTarget(
             name: "OhMyServers",
