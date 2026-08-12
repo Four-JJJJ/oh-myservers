@@ -40,6 +40,16 @@ final class SSHErrorLocalizerTests: XCTestCase {
             SSHErrorLocalizer.message(from: "Could not open identity file /tmp/id_rsa"),
             "找不到私钥文件"
         )
+        XCTAssertEqual(
+            SSHErrorLocalizer.message(from: "no such identity: /tmp/id_ed25519"),
+            "找不到私钥文件"
+        )
+    }
+
+    func testProcStatMissingFileIsNotIdentityError() {
+        let message = SSHErrorLocalizer.message(from: "cat: /proc/stat: No such file or directory")
+        XCTAssertTrue(message.hasPrefix("SSH 失败："), "远端文件缺失应走兜底文案，不能误报成找不到私钥")
+        XCTAssertFalse(message.contains("找不到私钥文件"))
     }
 
     func testMissingCredentials() {

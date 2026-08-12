@@ -18,7 +18,9 @@ public enum SSHErrorLocalizer {
         if lower.contains("network is unreachable") {
             return "网络不可达"
         }
-        if lower.contains("no such file") || lower.contains("identity") {
+        if lower.contains("identity file")
+            || lower.contains("no such identity")
+            || lower.contains("could not open identity") {
             return "找不到私钥文件"
         }
         if lower.contains("missing credentials") || lower.contains("缺少登录凭据") {

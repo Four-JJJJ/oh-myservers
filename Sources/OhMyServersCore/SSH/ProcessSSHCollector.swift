@@ -15,6 +15,17 @@ public final class ProcessSSHCollector: SSHCollecting, @unchecked Sendable {
         self.overallTimeoutSeconds = overallTimeoutSeconds
     }
 
+    static let maxSampleAgeSeconds: TimeInterval = 120
+
+    static func isUsableCache(
+        _ sample: MetricSample?,
+        now: Date = Date(),
+        maxAge: TimeInterval = maxSampleAgeSeconds
+    ) -> Bool {
+        guard let sample else { return false }
+        return now.timeIntervalSince(sample.sampledAt) <= maxAge
+    }
+
     static func remoteCommand(hasCache: Bool) -> String {
         hasCache ? RemoteMetricScripts.collectCommand : RemoteMetricScripts.collectCommandInitial
     }
@@ -22,12 +33,13 @@ public final class ProcessSSHCollector: SSHCollecting, @unchecked Sendable {
     public func collect(from server: ServerConfig, credential: SSHCredential) async -> MetricsSnapshot {
         do {
             let cached = cachedSample(for: server.id)
+            let hasUsableCache = Self.isUsableCache(cached)
             let output = try await runSSH(
                 server: server,
                 credential: credential,
-                command: Self.remoteCommand(hasCache: cached != nil)
+                command: Self.remoteCommand(hasCache: hasUsableCache)
             )
-            if let cached {
+            if hasUsableCache, let cached {
                 guard let current = RemoteMetricScripts.parseSections(output) else {
                     return parseFailure(serverID: server.id)
                 }
