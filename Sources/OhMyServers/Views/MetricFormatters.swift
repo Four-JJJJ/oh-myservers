@@ -59,7 +59,6 @@ enum MetricFormatters {
 
     static func barFill(percent: Double?, highThreshold: Double) -> Color {
         guard let percent else { return Graphite.accent }
-        if percent >= 90 { return Graphite.offline }
         if percent >= highThreshold { return Graphite.high }
         return Graphite.accent
     }

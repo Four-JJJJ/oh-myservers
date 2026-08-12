@@ -53,11 +53,10 @@ struct MenuBarRootView: View {
 
             HStack(spacing: 16) {
                 HStack(spacing: 8) {
-                    if model.isRefreshing {
-                        ProgressView()
-                            .controlSize(.small)
-                            .frame(width: 12, height: 12)
-                    }
+                    ProgressView()
+                        .controlSize(.small)
+                        .frame(width: 12, height: 12)
+                        .opacity(model.isRefreshing ? 1 : 0)
                     headerButton(L10n.refresh, disabled: model.isRefreshing) {
                         model.refreshNow()
                     }
@@ -79,6 +78,7 @@ struct MenuBarRootView: View {
         }
         .frame(width: 320)
         .background(Graphite.bg)
+        .preferredColorScheme(.dark)
         .onAppear { model.refreshNow() }
     }
 
