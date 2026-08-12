@@ -1,34 +1,36 @@
 import SwiftUI
 
 enum Graphite {
-    static let bg = Color(red: 0.11, green: 0.11, blue: 0.12)
-    static let bgElevated = Color(red: 0.14, green: 0.14, blue: 0.15)
-    static let card = Color(red: 0.17, green: 0.17, blue: 0.18)
-    static let field = Color(red: 0.20, green: 0.20, blue: 0.21)
-    static let text = Color(red: 0.96, green: 0.96, blue: 0.97)
-    static let muted = Color(red: 0.63, green: 0.63, blue: 0.65)
-    static let divider = Color(red: 0.23, green: 0.23, blue: 0.24)
-    static let accent = Color(red: 0.35, green: 0.78, blue: 0.92)
-    static let online = Color(red: 0.19, green: 0.82, blue: 0.35)
-    static let high = Color(red: 1, green: 0.84, blue: 0.04)
-    static let offline = Color(red: 1, green: 0.35, blue: 0.35)
+    /// Matches the approved Graphite demo (#1c1c1e / #2c2c2e).
+    static let bg = Color(red: 28 / 255, green: 28 / 255, blue: 30 / 255)
+    static let bgElevated = Color(red: 36 / 255, green: 36 / 255, blue: 38 / 255)
+    static let card = Color(red: 44 / 255, green: 44 / 255, blue: 46 / 255)
+    static let field = Color(red: 58 / 255, green: 58 / 255, blue: 60 / 255)
+    static let text = Color(red: 245 / 255, green: 245 / 255, blue: 247 / 255)
+    static let muted = Color(red: 161 / 255, green: 161 / 255, blue: 166 / 255)
+    static let divider = Color(red: 58 / 255, green: 58 / 255, blue: 60 / 255)
+    static let accent = Color(red: 100 / 255, green: 210 / 255, blue: 255 / 255)
+    static let online = Color(red: 48 / 255, green: 209 / 255, blue: 88 / 255)
+    static let high = Color(red: 255 / 255, green: 214 / 255, blue: 10 / 255)
+    static let offline = Color(red: 255 / 255, green: 69 / 255, blue: 58 / 255)
 }
 
 enum L10n {
     static let appName = "Oh My Servers"
     static let settings = "设置"
-    static let refresh = "立即刷新"
+    static let refresh = "刷新"
     static let quit = "退出"
     static let noServers = "还没有服务器"
     static let noServersHint = "打开设置添加香港 / 美国等主机"
-    static let waitingSample = "正在采集第一份数据…"
+    static let waitingSample = "正在采集…"
     static let online = "在线"
     static let high = "偏高"
     static let offline = "离线"
     static let cpu = "CPU"
-    static let mem = "内存"
-    static let load = "负载"
-    static let disk = "磁盘"
+    static let mem = "MEM"
+    static let load = "Load"
+    static let disk = "Disk"
+    static let net = "Net"
     static let netIn = "下行"
     static let netOut = "上行"
     static let uptime = "运行"

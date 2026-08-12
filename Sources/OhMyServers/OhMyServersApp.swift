@@ -10,15 +10,14 @@ struct OhMyServersApp: App {
             MenuBarRootView()
                 .environmentObject(model)
         } label: {
-            Label {
+            // Demo style: status dot + summary text
+            HStack(spacing: 5) {
+                Circle()
+                    .fill(statusColor)
+                    .frame(width: 7, height: 7)
                 Text(model.menuBarTitle)
-                    .font(.system(size: 12, weight: .medium).monospacedDigit())
-            } icon: {
-                Image(systemName: "server.rack")
-                    .symbolRenderingMode(.palette)
-                    .foregroundStyle(statusColor, statusColor.opacity(0.85))
+                    .font(.system(size: 12, weight: .regular).monospacedDigit())
             }
-            .labelStyle(.titleAndIcon)
         }
         .menuBarExtraStyle(.window)
     }

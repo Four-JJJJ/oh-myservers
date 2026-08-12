@@ -7,141 +7,109 @@ struct MenuBarRootView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
+            // Compact header — demo-like, minimal chrome
             HStack(spacing: 8) {
                 Image(systemName: "server.rack")
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(Graphite.accent)
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(Graphite.muted)
                 Text(L10n.appName)
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(Graphite.text)
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundStyle(Graphite.muted)
                 Spacer(minLength: 8)
-                Button(L10n.settings) {
+                headerButton(L10n.settings) {
                     SettingsWindow.present(model: model)
                 }
-                .buttonStyle(.borderless)
-                .foregroundStyle(Graphite.muted)
-                .font(.system(size: 12, weight: .medium))
             }
             .padding(.horizontal, 14)
-            .padding(.vertical, 12)
-
-            Rectangle()
-                .fill(Graphite.divider)
-                .frame(height: 1)
+            .padding(.top, 12)
+            .padding(.bottom, 10)
 
             if model.servers.isEmpty {
-                VStack(alignment: .leading, spacing: 6) {
-                    Text(L10n.noServers)
-                        .font(.system(size: 12, weight: .medium))
-                        .foregroundStyle(Graphite.text)
-                    Text(L10n.noServersHint)
-                        .font(.system(size: 11))
-                        .foregroundStyle(Graphite.muted)
-                }
-                .padding(16)
+                Text(L10n.noServersHint)
+                    .font(.system(size: 12))
+                    .foregroundStyle(Graphite.muted)
+                    .padding(.horizontal, 14)
+                    .padding(.bottom, 14)
             } else {
-                VStack(spacing: 10) {
-                    ForEach(model.servers) { server in
-                        ServerRowView(
+                // Single inner card with dividers — matches Graphite demo
+                VStack(alignment: .leading, spacing: 0) {
+                    ForEach(Array(model.servers.enumerated()), id: \.element.id) { index, server in
+                        if index > 0 {
+                            Rectangle()
+                                .fill(Graphite.divider)
+                                .frame(height: 1)
+                                .padding(.vertical, 10)
+                        }
+                        ServerBlockView(
                             server: server,
                             snapshot: model.snapshots[server.id]
                         )
                     }
                 }
                 .padding(12)
+                .background(Graphite.card)
+                .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                .padding(.horizontal, 14)
+                .padding(.bottom, 12)
             }
 
-            Rectangle()
-                .fill(Graphite.divider)
-                .frame(height: 1)
-
-            HStack {
-                Button(L10n.refresh) {
-                    model.refreshNow()
-                }
-                .buttonStyle(.borderless)
-                .font(.system(size: 12, weight: .medium))
-                .foregroundStyle(Graphite.muted)
+            HStack(spacing: 16) {
+                headerButton(L10n.refresh) { model.refreshNow() }
                 Spacer()
-                Button(L10n.quit) {
-                    NSApplication.shared.terminate(nil)
-                }
-                .buttonStyle(.borderless)
-                .font(.system(size: 12, weight: .medium))
-                .foregroundStyle(Graphite.muted)
+                headerButton(L10n.quit) { NSApplication.shared.terminate(nil) }
             }
             .padding(.horizontal, 14)
-            .padding(.vertical, 10)
+            .padding(.bottom, 12)
         }
-        .frame(width: 380)
+        .frame(width: 300)
         .background(Graphite.bg)
-        .onAppear {
-            model.refreshNow()
+        .onAppear { model.refreshNow() }
+    }
+
+    private func headerButton(_ title: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Text(title)
+                .font(.system(size: 11, weight: .medium))
+                .foregroundStyle(Graphite.muted)
         }
+        .buttonStyle(.borderless)
     }
 }
 
-struct ServerRowView: View {
+/// One server block inside the shared demo card.
+struct ServerBlockView: View {
     let server: ServerConfig
     let snapshot: MetricsSnapshot?
 
-    private let labelWidth: CGFloat = 36
-
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack(alignment: .center, spacing: 10) {
-                statusDot
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(server.name)
-                        .font(.system(size: 13, weight: .semibold))
-                        .foregroundStyle(Graphite.text)
-                    Text("\(server.label)  ·  \(server.host)")
-                        .font(.system(size: 10, weight: .medium).monospacedDigit())
-                        .foregroundStyle(Graphite.muted)
-                }
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Text(server.name)
+                    .font(.system(size: 12, weight: .regular))
+                    .foregroundStyle(Graphite.text)
                 Spacer(minLength: 8)
                 Text(statusText)
-                    .font(.system(size: 11, weight: .semibold))
+                    .font(.system(size: 12, weight: .regular))
                     .foregroundStyle(statusColor)
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 3)
-                    .background(statusColor.opacity(0.14))
-                    .clipShape(Capsule())
             }
 
             if let snapshot, snapshot.isReachable {
-                VStack(spacing: 7) {
-                    metricRow((L10n.cpu, cpuText(snapshot)), (L10n.mem, memText(snapshot)))
-                    metricRow((L10n.load, loadText(snapshot)), (L10n.disk, diskText(snapshot)))
-                    metricRow((L10n.netIn, netRxText(snapshot)), (L10n.netOut, netTxText(snapshot)))
-                    metricRow((L10n.uptime, uptimeText(snapshot)), nil)
+                // Demo 2×2: CPU / MEM / Disk / Net
+                VStack(spacing: 6) {
+                    HStack(spacing: 0) {
+                        demoMetric(L10n.cpu, cpuText(snapshot))
+                        demoMetric(L10n.mem, memText(snapshot))
+                    }
+                    HStack(spacing: 0) {
+                        demoMetric(L10n.disk, diskText(snapshot))
+                        demoMetric(L10n.net, netText(snapshot))
+                    }
                 }
             } else {
                 Text(snapshot?.errorMessage ?? L10n.waitingSample)
                     .font(.system(size: 11))
                     .foregroundStyle(Graphite.muted)
                     .fixedSize(horizontal: false, vertical: true)
-            }
-        }
-        .padding(12)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Graphite.card)
-        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
-    }
-
-    private var statusDot: some View {
-        Circle()
-            .fill(statusColor)
-            .frame(width: 8, height: 8)
-    }
-
-    private func metricRow(_ left: (String, String), _ right: (String, String)?) -> some View {
-        HStack(spacing: 16) {
-            metric(left.0, left.1)
-            if let right {
-                metric(right.0, right.1)
-            } else {
-                Color.clear.frame(maxWidth: .infinity)
             }
         }
     }
@@ -164,18 +132,16 @@ struct ServerRowView: View {
         }
     }
 
-    private func metric(_ label: String, _ value: String) -> some View {
-        HStack(spacing: 0) {
+    private func demoMetric(_ label: String, _ value: String) -> some View {
+        HStack(spacing: 4) {
             Text(label)
                 .foregroundStyle(Graphite.muted)
-                .frame(width: labelWidth, alignment: .leading)
             Text(value)
-                .foregroundStyle(Graphite.text)
                 .fontWeight(.semibold)
-                .lineLimit(1)
-                .frame(maxWidth: .infinity, alignment: .trailing)
+                .foregroundStyle(Graphite.text)
+            Spacer(minLength: 0)
         }
-        .font(.system(size: 11).monospacedDigit())
+        .font(.system(size: 12).monospacedDigit())
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
@@ -189,41 +155,19 @@ struct ServerRowView: View {
         return "\(Int(v.rounded()))%"
     }
 
-    private func loadText(_ s: MetricsSnapshot) -> String {
-        guard let a = s.load1, let b = s.load5, let c = s.load15 else {
-            if let a = s.load1 { return String(format: "%.2f", a) }
-            return "—"
-        }
-        return String(format: "%.2f / %.2f / %.2f", a, b, c)
-    }
-
     private func diskText(_ s: MetricsSnapshot) -> String {
         guard let v = s.diskUsedPercent else { return "—" }
         return "\(Int(v.rounded()))%"
     }
 
-    private func netRxText(_ s: MetricsSnapshot) -> String {
+    private func netText(_ s: MetricsSnapshot) -> String {
         guard let rx = s.netRxBytesPerSec else { return "—" }
-        return formatRate(rx)
-    }
-
-    private func netTxText(_ s: MetricsSnapshot) -> String {
-        guard let tx = s.netTxBytesPerSec else { return "—" }
-        return formatRate(tx)
-    }
-
-    private func uptimeText(_ s: MetricsSnapshot) -> String {
-        guard let sec = s.uptimeSeconds else { return "—" }
-        let days = sec / 86_400
-        let hours = (sec % 86_400) / 3600
-        if days > 0 { return "\(days) 天 \(hours) 小时" }
-        let mins = (sec % 3600) / 60
-        return "\(hours) 小时 \(mins) 分"
+        return "↓\(formatRate(rx))"
     }
 
     private func formatRate(_ bytesPerSec: Double) -> String {
-        if bytesPerSec > 1_000_000 { return String(format: "%.1f MB/s", bytesPerSec / 1_000_000) }
-        if bytesPerSec > 1_000 { return String(format: "%.1f KB/s", bytesPerSec / 1_000) }
-        return String(format: "%.0f B/s", bytesPerSec)
+        if bytesPerSec >= 1_000_000 { return String(format: "%.1fM", bytesPerSec / 1_000_000) }
+        if bytesPerSec >= 1_000 { return String(format: "%.1fK", bytesPerSec / 1_000) }
+        return String(format: "%.0fB", bytesPerSec)
     }
 }
