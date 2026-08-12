@@ -4,9 +4,11 @@ import SwiftUI
 @MainActor
 enum SettingsWindow {
     private static var window: NSWindow?
+    private static var closer: WindowCloser?
 
     static func present(model: AppModel) {
-        // Menu-bar (LSUIElement) apps must activate before any window can appear.
+        // LSUIElement menu-bar apps stay .accessory; windows won't surface until .regular.
+        NSApp.setActivationPolicy(.regular)
         NSApp.activate(ignoringOtherApps: true)
 
         if let window {
@@ -24,7 +26,26 @@ enum SettingsWindow {
         window.setContentSize(NSSize(width: 560, height: 440))
         window.center()
         window.isReleasedWhenClosed = false
-        window.makeKeyAndOrderFront(nil)
+        let closer = WindowCloser {
+            Self.window = nil
+            Self.closer = nil
+            NSApp.setActivationPolicy(.accessory)
+        }
+        window.delegate = closer
+        self.closer = closer
         self.window = window
+        window.makeKeyAndOrderFront(nil)
+    }
+}
+
+private final class WindowCloser: NSObject, NSWindowDelegate {
+    private let onClose: () -> Void
+
+    init(onClose: @escaping () -> Void) {
+        self.onClose = onClose
+    }
+
+    func windowWillClose(_ notification: Notification) {
+        onClose()
     }
 }
