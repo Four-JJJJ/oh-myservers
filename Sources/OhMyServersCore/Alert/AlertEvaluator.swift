@@ -26,9 +26,9 @@ public struct AlertEvaluator {
             let wasReachable = previous[server.id]?.isReachable ?? true
             let isReachable = current[server.id]?.isReachable ?? false
             if wasReachable && !isReachable {
-                let detail = current[server.id]?.errorMessage ?? "Connection failed"
+                let detail = current[server.id]?.errorMessage ?? "连接失败"
                 events.append(AlertEvent(
-                    title: "\(server.name) offline",
+                    title: "\(server.name) 已离线",
                     body: detail
                 ))
             }
@@ -40,11 +40,10 @@ public struct AlertEvaluator {
         let wasAbnormal = aggregator.overallIsAbnormal(snapshots: prevSnaps)
         let isAbnormal = aggregator.overallIsAbnormal(snapshots: currSnaps)
         if !wasAbnormal && isAbnormal {
-            // Avoid duplicate if we already emitted per-server offline for the only change.
             if events.isEmpty {
                 events.append(AlertEvent(
-                    title: "Server status abnormal",
-                    body: "One or more servers need attention"
+                    title: "服务器状态异常",
+                    body: "有一台或多台服务器需要关注"
                 ))
             }
         }

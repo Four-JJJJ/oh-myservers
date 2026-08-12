@@ -6,7 +6,7 @@ public struct StatusAggregator {
     /// Builds menu bar title like `HK 23% · US 41%` or `HK —` when offline.
     public func menuBarTitle(servers: [ServerConfig], snapshots: [UUID: MetricsSnapshot]) -> String {
         let enabled = servers.filter(\.isEnabled)
-        guard !enabled.isEmpty else { return "No servers" }
+        guard !enabled.isEmpty else { return "无服务器" }
 
         return enabled.map { server in
             let label = server.label.isEmpty ? String(server.name.prefix(2)).uppercased() : server.label

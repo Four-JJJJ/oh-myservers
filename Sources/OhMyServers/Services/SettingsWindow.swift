@@ -21,7 +21,10 @@ enum SettingsWindow {
             .frame(minWidth: 560, minHeight: 440)
         let hosting = NSHostingController(rootView: root)
         let window = NSWindow(contentViewController: hosting)
-        window.title = "Oh My Servers"
+        window.title = "Oh My Servers · 设置"
+        window.backgroundColor = NSColor(red: 0.11, green: 0.11, blue: 0.12, alpha: 1)
+        window.titlebarAppearsTransparent = true
+        window.appearance = NSAppearance(named: .darkAqua)
         window.styleMask = [.titled, .closable, .miniaturizable, .resizable]
         window.setContentSize(NSSize(width: 560, height: 440))
         window.center()

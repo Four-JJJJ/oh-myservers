@@ -2,33 +2,25 @@ import AppKit
 import SwiftUI
 import OhMyServersCore
 
-private enum Graphite {
-    static let bg = Color(red: 0.11, green: 0.11, blue: 0.12)
-    static let card = Color(red: 0.17, green: 0.17, blue: 0.18)
-    static let text = Color(red: 0.96, green: 0.96, blue: 0.97)
-    static let muted = Color(red: 0.63, green: 0.63, blue: 0.65)
-    static let divider = Color(red: 0.23, green: 0.23, blue: 0.24)
-    static let online = Color(red: 0.19, green: 0.82, blue: 0.35)
-    static let high = Color(red: 1, green: 0.84, blue: 0.04)
-    static let offline = Color(red: 1, green: 0.35, blue: 0.35)
-}
-
 struct MenuBarRootView: View {
     @EnvironmentObject private var model: AppModel
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            HStack {
-                Text("Oh My Servers")
+            HStack(spacing: 8) {
+                Image(systemName: "server.rack")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(Graphite.accent)
+                Text(L10n.appName)
                     .font(.system(size: 13, weight: .semibold))
                     .foregroundStyle(Graphite.text)
-                Spacer()
-                Button("Settings") {
+                Spacer(minLength: 8)
+                Button(L10n.settings) {
                     SettingsWindow.present(model: model)
                 }
                 .buttonStyle(.borderless)
                 .foregroundStyle(Graphite.muted)
-                .font(.system(size: 12))
+                .font(.system(size: 12, weight: .medium))
             }
             .padding(.horizontal, 14)
             .padding(.vertical, 12)
@@ -38,10 +30,15 @@ struct MenuBarRootView: View {
                 .frame(height: 1)
 
             if model.servers.isEmpty {
-                Text("No servers yet. Open Settings to add one.")
-                    .font(.system(size: 12))
-                    .foregroundStyle(Graphite.muted)
-                    .padding(16)
+                VStack(alignment: .leading, spacing: 6) {
+                    Text(L10n.noServers)
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundStyle(Graphite.text)
+                    Text(L10n.noServersHint)
+                        .font(.system(size: 11))
+                        .foregroundStyle(Graphite.muted)
+                }
+                .padding(16)
             } else {
                 VStack(spacing: 10) {
                     ForEach(model.servers) { server in
@@ -59,24 +56,24 @@ struct MenuBarRootView: View {
                 .frame(height: 1)
 
             HStack {
-                Button("Refresh now") {
+                Button(L10n.refresh) {
                     model.refreshNow()
                 }
                 .buttonStyle(.borderless)
-                .font(.system(size: 12))
+                .font(.system(size: 12, weight: .medium))
                 .foregroundStyle(Graphite.muted)
                 Spacer()
-                Button("Quit") {
+                Button(L10n.quit) {
                     NSApplication.shared.terminate(nil)
                 }
                 .buttonStyle(.borderless)
-                .font(.system(size: 12))
+                .font(.system(size: 12, weight: .medium))
                 .foregroundStyle(Graphite.muted)
             }
             .padding(.horizontal, 14)
             .padding(.vertical, 10)
         }
-        .frame(width: 360)
+        .frame(width: 380)
         .background(Graphite.bg)
         .onAppear {
             model.refreshNow()
@@ -88,33 +85,39 @@ struct ServerRowView: View {
     let server: ServerConfig
     let snapshot: MetricsSnapshot?
 
+    private let labelWidth: CGFloat = 36
+
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            HStack(alignment: .firstTextBaseline) {
+            HStack(alignment: .center, spacing: 10) {
+                statusDot
                 VStack(alignment: .leading, spacing: 2) {
                     Text(server.name)
                         .font(.system(size: 13, weight: .semibold))
                         .foregroundStyle(Graphite.text)
-                    Text("\(server.label) · \(server.host)")
-                        .font(.system(size: 10).monospacedDigit())
+                    Text("\(server.label)  ·  \(server.host)")
+                        .font(.system(size: 10, weight: .medium).monospacedDigit())
                         .foregroundStyle(Graphite.muted)
                 }
-                Spacer()
+                Spacer(minLength: 8)
                 Text(statusText)
                     .font(.system(size: 11, weight: .semibold))
                     .foregroundStyle(statusColor)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 3)
+                    .background(statusColor.opacity(0.14))
+                    .clipShape(Capsule())
             }
 
             if let snapshot, snapshot.isReachable {
-                // Avoid LazyVGrid inside MenuBarExtra — it often collapses to zero height.
-                VStack(spacing: 6) {
-                    metricRow(("CPU", cpuText(snapshot)), ("MEM", memText(snapshot)))
-                    metricRow(("Load", loadText(snapshot)), ("Disk", diskText(snapshot)))
-                    metricRow(("Net ↓", netRxText(snapshot)), ("Net ↑", netTxText(snapshot)))
-                    metricRow(("Up", uptimeText(snapshot)), ("Host", server.host))
+                VStack(spacing: 7) {
+                    metricRow((L10n.cpu, cpuText(snapshot)), (L10n.mem, memText(snapshot)))
+                    metricRow((L10n.load, loadText(snapshot)), (L10n.disk, diskText(snapshot)))
+                    metricRow((L10n.netIn, netRxText(snapshot)), (L10n.netOut, netTxText(snapshot)))
+                    metricRow((L10n.uptime, uptimeText(snapshot)), nil)
                 }
             } else {
-                Text(snapshot?.errorMessage ?? "Waiting for first sample…")
+                Text(snapshot?.errorMessage ?? L10n.waitingSample)
                     .font(.system(size: 11))
                     .foregroundStyle(Graphite.muted)
                     .fixedSize(horizontal: false, vertical: true)
@@ -123,21 +126,31 @@ struct ServerRowView: View {
         .padding(12)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(Graphite.card)
-        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
     }
 
-    private func metricRow(_ left: (String, String), _ right: (String, String)) -> some View {
-        HStack(spacing: 12) {
+    private var statusDot: some View {
+        Circle()
+            .fill(statusColor)
+            .frame(width: 8, height: 8)
+    }
+
+    private func metricRow(_ left: (String, String), _ right: (String, String)?) -> some View {
+        HStack(spacing: 16) {
             metric(left.0, left.1)
-            metric(right.0, right.1)
+            if let right {
+                metric(right.0, right.1)
+            } else {
+                Color.clear.frame(maxWidth: .infinity)
+            }
         }
     }
 
     private var statusText: String {
         switch snapshot?.health {
-        case .online: return "Online"
-        case .high: return "High"
-        case .offline: return "Offline"
+        case .online: return L10n.online
+        case .high: return L10n.high
+        case .offline: return L10n.offline
         case nil: return "…"
         }
     }
@@ -152,14 +165,15 @@ struct ServerRowView: View {
     }
 
     private func metric(_ label: String, _ value: String) -> some View {
-        HStack(spacing: 4) {
+        HStack(spacing: 0) {
             Text(label)
                 .foregroundStyle(Graphite.muted)
+                .frame(width: labelWidth, alignment: .leading)
             Text(value)
                 .foregroundStyle(Graphite.text)
                 .fontWeight(.semibold)
                 .lineLimit(1)
-            Spacer(minLength: 0)
+                .frame(maxWidth: .infinity, alignment: .trailing)
         }
         .font(.system(size: 11).monospacedDigit())
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -180,7 +194,7 @@ struct ServerRowView: View {
             if let a = s.load1 { return String(format: "%.2f", a) }
             return "—"
         }
-        return String(format: "%.2f/%.2f/%.2f", a, b, c)
+        return String(format: "%.2f / %.2f / %.2f", a, b, c)
     }
 
     private func diskText(_ s: MetricsSnapshot) -> String {
@@ -202,14 +216,14 @@ struct ServerRowView: View {
         guard let sec = s.uptimeSeconds else { return "—" }
         let days = sec / 86_400
         let hours = (sec % 86_400) / 3600
-        if days > 0 { return "\(days)d \(hours)h" }
+        if days > 0 { return "\(days) 天 \(hours) 小时" }
         let mins = (sec % 3600) / 60
-        return "\(hours)h \(mins)m"
+        return "\(hours) 小时 \(mins) 分"
     }
 
     private func formatRate(_ bytesPerSec: Double) -> String {
-        if bytesPerSec > 1_000_000 { return String(format: "%.1fM", bytesPerSec / 1_000_000) }
-        if bytesPerSec > 1_000 { return String(format: "%.1fK", bytesPerSec / 1_000) }
-        return String(format: "%.0fB", bytesPerSec)
+        if bytesPerSec > 1_000_000 { return String(format: "%.1f MB/s", bytesPerSec / 1_000_000) }
+        if bytesPerSec > 1_000 { return String(format: "%.1f KB/s", bytesPerSec / 1_000) }
+        return String(format: "%.0f B/s", bytesPerSec)
     }
 }

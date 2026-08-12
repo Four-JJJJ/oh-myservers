@@ -23,6 +23,6 @@ final class StatusAggregatorTests: XCTestCase {
     }
 
     func testEmptyServers() {
-        XCTAssertEqual(StatusAggregator().menuBarTitle(servers: [], snapshots: [:]), "No servers")
+        XCTAssertEqual(StatusAggregator().menuBarTitle(servers: [], snapshots: [:]), "无服务器")
     }
 }

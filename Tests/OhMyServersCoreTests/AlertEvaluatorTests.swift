@@ -12,7 +12,7 @@ final class AlertEvaluatorTests: XCTestCase {
         ]
         let events = AlertEvaluator().evaluate(servers: [server], previous: prev, current: curr)
         XCTAssertEqual(events.count, 1)
-        XCTAssertTrue(events[0].title.contains("offline"))
+        XCTAssertTrue(events[0].title.contains("离线"))
     }
 
     func testNoRepeatWhileStillOffline() {
@@ -34,6 +34,6 @@ final class AlertEvaluatorTests: XCTestCase {
         ]
         let events = AlertEvaluator().evaluate(servers: [server], previous: prev, current: curr)
         XCTAssertEqual(events.count, 1)
-        XCTAssertTrue(events[0].title.lowercased().contains("abnormal"))
+        XCTAssertTrue(events[0].title.contains("异常"))
     }
 }
