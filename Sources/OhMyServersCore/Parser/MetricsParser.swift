@@ -1,64 +1,73 @@
 import Foundation
 
-public struct RemoteMetricRaw: Sendable, Equatable {
-    public var procStat1: String
-    public var procStat2: String
+public struct MetricSample: Sendable, Equatable {
+    public var procStat: String
     public var procMeminfo: String
     public var procLoadavg: String
     public var procUptime: String
-    public var procNetDev1: String
-    public var procNetDev2: String
+    public var procNetDev: String
     public var df: String
-    /// Seconds between the paired samples (stat/net).
-    public var sampleIntervalSeconds: Double
+    public var nprocText: String
+    public var sampledAt: Date
 
     public init(
-        procStat1: String,
-        procStat2: String,
+        procStat: String,
         procMeminfo: String,
         procLoadavg: String,
         procUptime: String,
-        procNetDev1: String,
-        procNetDev2: String,
+        procNetDev: String,
         df: String,
-        sampleIntervalSeconds: Double = 1.0
+        nprocText: String,
+        sampledAt: Date
     ) {
-        self.procStat1 = procStat1
-        self.procStat2 = procStat2
+        self.procStat = procStat
         self.procMeminfo = procMeminfo
         self.procLoadavg = procLoadavg
         self.procUptime = procUptime
-        self.procNetDev1 = procNetDev1
-        self.procNetDev2 = procNetDev2
+        self.procNetDev = procNetDev
         self.df = df
-        self.sampleIntervalSeconds = sampleIntervalSeconds
+        self.nprocText = nprocText
+        self.sampledAt = sampledAt
     }
 }
 
 public enum MetricsParser {
-    public static func parse(serverID: UUID, raw: RemoteMetricRaw, collectedAt: Date = Date()) -> MetricsSnapshot {
-        let cpu = cpuPercent(stat1: raw.procStat1, stat2: raw.procStat2)
-        let mem = memory(from: raw.procMeminfo)
-        let load = loadAverage(from: raw.procLoadavg)
-        let uptime = uptimeSeconds(from: raw.procUptime)
-        let disk = diskUsedPercent(from: raw.df)
-        let net = networkRate(
-            net1: raw.procNetDev1,
-            net2: raw.procNetDev2,
-            interval: raw.sampleIntervalSeconds
-        )
+    public static func parse(
+        serverID: UUID,
+        current: MetricSample,
+        previous: MetricSample?,
+        intervalSeconds: Double? = nil
+    ) -> MetricsSnapshot {
+        let mem = memory(from: current.procMeminfo)
+        let load = loadAverage(from: current.procLoadavg)
+        let uptime = uptimeSeconds(from: current.procUptime)
+        let disk = diskUsage(from: current.df)
+        let cpuCount = cpuCount(from: current.nprocText)
+
+        var cpu: Double?
+        var net: (rx: Double, tx: Double)?
+        if let previous {
+            let interval = intervalSeconds ?? current.sampledAt.timeIntervalSince(previous.sampledAt)
+            if interval > 0 {
+                cpu = cpuPercent(stat1: previous.procStat, stat2: current.procStat)
+                net = networkRate(net1: previous.procNetDev, net2: current.procNetDev, interval: interval)
+            }
+        }
 
         return MetricsSnapshot(
             serverID: serverID,
-            collectedAt: collectedAt,
+            collectedAt: current.sampledAt,
             isReachable: true,
             cpuPercent: cpu,
             load1: load?.0,
             load5: load?.1,
             load15: load?.2,
+            cpuCount: cpuCount,
             memoryUsedBytes: mem?.used,
             memoryTotalBytes: mem?.total,
-            diskUsedPercent: disk,
+            diskUsedPercent: disk.percent,
+            diskUsedBytes: disk.usedBytes,
+            diskTotalBytes: disk.totalBytes,
             netRxBytesPerSec: net?.rx,
             netTxBytesPerSec: net?.tx,
             uptimeSeconds: uptime
@@ -93,6 +102,10 @@ public enum MetricsParser {
         let idle = values[3] + (values.count > 4 ? values[4] : 0) // idle + iowait
         let total = values.reduce(UInt64(0), +)
         return CPUTimes(total: total, idle: idle)
+    }
+
+    static func cpuCount(from text: String) -> Int? {
+        text.split(whereSeparator: \.isWhitespace).compactMap { Int($0) }.first
     }
 
     // MARK: - Memory
@@ -133,16 +146,19 @@ public enum MetricsParser {
 
     // MARK: - Disk
 
-    static func diskUsedPercent(from df: String) -> Double? {
+    static func diskUsage(from df: String) -> (percent: Double?, usedBytes: UInt64?, totalBytes: UInt64?) {
         for line in df.split(separator: "\n").dropFirst() {
             let parts = line.split(whereSeparator: \.isWhitespace)
             guard parts.count >= 6 else { continue }
             let mount = parts[parts.count - 1]
             guard mount == "/" else { continue }
             let capacity = parts[parts.count - 2].trimmingCharacters(in: CharacterSet(charactersIn: "%"))
-            return Double(capacity)
+            let percent = Double(capacity)
+            let totalBytes = UInt64(parts[parts.count - 5]).map { $0 * 1024 }
+            let usedBytes = UInt64(parts[parts.count - 4]).map { $0 * 1024 }
+            return (percent, usedBytes, totalBytes)
         }
-        return nil
+        return (nil, nil, nil)
     }
 
     // MARK: - Network

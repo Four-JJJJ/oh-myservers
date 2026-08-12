@@ -1,31 +1,88 @@
+import Darwin
 import Foundation
 
 /// Collects metrics by shelling out to `/usr/bin/ssh` (same stack as the user's
 /// working CLI config). Citadel/NIOSSH fails KEX against modern OpenSSH servers.
-public struct ProcessSSHCollector: SSHCollecting {
+public final class ProcessSSHCollector: SSHCollecting, @unchecked Sendable {
     public var connectTimeoutSeconds: Int
+    public var overallTimeoutSeconds: TimeInterval
 
-    public init(connectTimeoutSeconds: Int = 10) {
+    private let lock = NSLock()
+    private var previousSamples: [UUID: MetricSample] = [:]
+
+    public init(connectTimeoutSeconds: Int = 10, overallTimeoutSeconds: TimeInterval = 15) {
         self.connectTimeoutSeconds = connectTimeoutSeconds
+        self.overallTimeoutSeconds = overallTimeoutSeconds
     }
 
     public func collect(from server: ServerConfig, credential: SSHCredential) async -> MetricsSnapshot {
         do {
-            let output = try await runSSH(server: server, credential: credential)
-            guard let raw = RemoteMetricScripts.parseSections(output) else {
-                return .unreachable(serverID: server.id, message: "Failed to parse remote metrics")
+            let cached = cachedSample(for: server.id)
+            if let cached {
+                let output = try await runSSH(
+                    server: server,
+                    credential: credential,
+                    command: RemoteMetricScripts.collectCommand
+                )
+                guard let current = RemoteMetricScripts.parseSections(output) else {
+                    return .unreachable(
+                        serverID: server.id,
+                        message: SSHErrorLocalizer.message(from: "Failed to parse remote metrics")
+                    )
+                }
+                storeSample(current, for: server.id)
+                return MetricsParser.parse(serverID: server.id, current: current, previous: cached)
+            } else {
+                let output = try await runSSH(
+                    server: server,
+                    credential: credential,
+                    command: RemoteMetricScripts.collectCommandInitial
+                )
+                guard let (sample1, sample2) = RemoteMetricScripts.parseInitialSections(output) else {
+                    return .unreachable(
+                        serverID: server.id,
+                        message: SSHErrorLocalizer.message(from: "Failed to parse remote metrics")
+                    )
+                }
+                storeSample(sample2, for: server.id)
+                return MetricsParser.parse(
+                    serverID: server.id,
+                    current: sample2,
+                    previous: sample1,
+                    intervalSeconds: 1
+                )
             }
-            return MetricsParser.parse(serverID: server.id, raw: raw)
         } catch {
-            return .unreachable(serverID: server.id, message: error.localizedDescription)
+            return .unreachable(
+                serverID: server.id,
+                message: SSHErrorLocalizer.message(from: error.localizedDescription)
+            )
         }
     }
 
-    private func runSSH(server: ServerConfig, credential: SSHCredential) async throws -> String {
+    private func cachedSample(for serverID: UUID) -> MetricSample? {
+        lock.lock()
+        defer { lock.unlock() }
+        return previousSamples[serverID]
+    }
+
+    private func storeSample(_ sample: MetricSample, for serverID: UUID) {
+        lock.lock()
+        previousSamples[serverID] = sample
+        lock.unlock()
+    }
+
+    private func runSSH(server: ServerConfig, credential: SSHCredential, command: String) async throws -> String {
         try await withCheckedThrowingContinuation { continuation in
             DispatchQueue.global(qos: .userInitiated).async {
                 do {
-                    let result = try Self.execute(server: server, credential: credential, timeout: self.connectTimeoutSeconds)
+                    let result = try Self.execute(
+                        server: server,
+                        credential: credential,
+                        command: command,
+                        connectTimeout: self.connectTimeoutSeconds,
+                        overallTimeout: self.overallTimeoutSeconds
+                    )
                     continuation.resume(returning: result)
                 } catch {
                     continuation.resume(throwing: error)
@@ -34,14 +91,25 @@ public struct ProcessSSHCollector: SSHCollecting {
         }
     }
 
-    private static func execute(server: ServerConfig, credential: SSHCredential, timeout: Int) throws -> String {
+    private static func execute(
+        server: ServerConfig,
+        credential: SSHCredential,
+        command: String,
+        connectTimeout: Int,
+        overallTimeout: TimeInterval
+    ) throws -> String {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/usr/bin/ssh")
 
         var args: [String] = [
-            "-o", "ConnectTimeout=\(timeout)",
+            "-o", "ConnectTimeout=\(connectTimeout)",
             "-o", "StrictHostKeyChecking=accept-new",
             "-o", "LogLevel=ERROR",
+            "-o", "ControlMaster=auto",
+            "-o", "ControlPath=/tmp/ohmyservers-%C",
+            "-o", "ControlPersist=120",
+            "-o", "ServerAliveInterval=5",
+            "-o", "ServerAliveCountMax=2",
             "-p", String(server.port)
         ]
 
@@ -85,13 +153,33 @@ public struct ProcessSSHCollector: SSHCollecting {
             }
         }
 
-        try process.run()
-        if let data = RemoteMetricScripts.collectCommand.data(using: .utf8) {
+        let group = DispatchGroup()
+        group.enter()
+        process.terminationHandler = { _ in
+            group.leave()
+        }
+
+        do {
+            try process.run()
+        } catch {
+            group.leave()
+            throw error
+        }
+        if let data = command.data(using: .utf8) {
             stdin.fileHandleForWriting.write(data)
         }
         try? stdin.fileHandleForWriting.close()
 
-        process.waitUntilExit()
+        let waitResult = group.wait(timeout: .now() + overallTimeout)
+        if waitResult == .timedOut {
+            process.terminate()
+            Thread.sleep(forTimeInterval: 0.2)
+            if process.isRunning {
+                kill(process.processIdentifier, SIGKILL)
+            }
+            process.waitUntilExit()
+            throw ProcessSSHError.failed("连接超时")
+        }
 
         let outData = stdout.fileHandleForReading.readDataToEndOfFile()
         let errData = stderr.fileHandleForReading.readDataToEndOfFile()

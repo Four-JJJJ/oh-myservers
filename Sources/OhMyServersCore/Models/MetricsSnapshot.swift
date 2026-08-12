@@ -15,9 +15,12 @@ public struct MetricsSnapshot: Identifiable, Sendable, Equatable {
     public var load1: Double?
     public var load5: Double?
     public var load15: Double?
+    public var cpuCount: Int?
     public var memoryUsedBytes: UInt64?
     public var memoryTotalBytes: UInt64?
     public var diskUsedPercent: Double?
+    public var diskUsedBytes: UInt64?
+    public var diskTotalBytes: UInt64?
     public var netRxBytesPerSec: Double?
     public var netTxBytesPerSec: Double?
     public var uptimeSeconds: UInt64?
@@ -31,9 +34,12 @@ public struct MetricsSnapshot: Identifiable, Sendable, Equatable {
         load1: Double? = nil,
         load5: Double? = nil,
         load15: Double? = nil,
+        cpuCount: Int? = nil,
         memoryUsedBytes: UInt64? = nil,
         memoryTotalBytes: UInt64? = nil,
         diskUsedPercent: Double? = nil,
+        diskUsedBytes: UInt64? = nil,
+        diskTotalBytes: UInt64? = nil,
         netRxBytesPerSec: Double? = nil,
         netTxBytesPerSec: Double? = nil,
         uptimeSeconds: UInt64? = nil,
@@ -46,9 +52,12 @@ public struct MetricsSnapshot: Identifiable, Sendable, Equatable {
         self.load1 = load1
         self.load5 = load5
         self.load15 = load15
+        self.cpuCount = cpuCount
         self.memoryUsedBytes = memoryUsedBytes
         self.memoryTotalBytes = memoryTotalBytes
         self.diskUsedPercent = diskUsedPercent
+        self.diskUsedBytes = diskUsedBytes
+        self.diskTotalBytes = diskTotalBytes
         self.netRxBytesPerSec = netRxBytesPerSec
         self.netTxBytesPerSec = netTxBytesPerSec
         self.uptimeSeconds = uptimeSeconds
@@ -65,7 +74,11 @@ public struct MetricsSnapshot: Identifiable, Sendable, Equatable {
         let cpuHigh = (cpuPercent ?? 0) >= 85
         let memHigh = (memoryUsedPercent ?? 0) >= 90
         let diskHigh = (diskUsedPercent ?? 0) >= 90
-        if cpuHigh || memHigh || diskHigh { return .high }
+        let loadHigh: Bool = {
+            guard let cpuCount, cpuCount > 0, let load1 else { return false }
+            return load1 >= Double(cpuCount)
+        }()
+        if cpuHigh || memHigh || diskHigh || loadHigh { return .high }
         return .online
     }
 

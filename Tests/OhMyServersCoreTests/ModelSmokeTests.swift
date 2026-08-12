@@ -34,4 +34,25 @@ final class ModelSmokeTests: XCTestCase {
         )
         XCTAssertEqual(snap.health, .high)
     }
+
+    func testHealthHighWhenLoadMeetsCpuCount() {
+        let snap = MetricsSnapshot(
+            serverID: UUID(),
+            isReachable: true,
+            cpuPercent: 10,
+            load1: 4,
+            cpuCount: 2
+        )
+        XCTAssertEqual(snap.health, .high)
+    }
+
+    func testHealthOnlineWhenLoadBelowCpuCount() {
+        let snap = MetricsSnapshot(
+            serverID: UUID(),
+            isReachable: true,
+            load1: 0.5,
+            cpuCount: 2
+        )
+        XCTAssertEqual(snap.health, .online)
+    }
 }

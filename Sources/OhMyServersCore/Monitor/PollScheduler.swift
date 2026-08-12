@@ -55,7 +55,7 @@ public actor PollScheduler {
             for server in enabled {
                 group.addTask {
                     guard let credential = self.credentialProvider(server) else {
-                        return .unreachable(serverID: server.id, message: "Missing credentials")
+                        return .unreachable(serverID: server.id, message: "缺少登录凭据")
                     }
                     return await self.collector.collect(from: server, credential: credential)
                 }
