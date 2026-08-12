@@ -47,6 +47,14 @@ final class SSHErrorLocalizerTests: XCTestCase {
         XCTAssertEqual(SSHErrorLocalizer.message(from: "缺少登录凭据"), "缺少登录凭据")
     }
 
+    func testParseFailureMessage() {
+        XCTAssertEqual(SSHErrorLocalizer.message(from: "无法解析远端指标"), "无法解析远端指标")
+        XCTAssertEqual(
+            SSHErrorLocalizer.message(from: "Failed to parse remote metrics"),
+            "无法解析远端指标"
+        )
+    }
+
     func testFallbackTruncatesTo160Characters() {
         let original = String(repeating: "x", count: 200)
         let message = SSHErrorLocalizer.message(from: original)

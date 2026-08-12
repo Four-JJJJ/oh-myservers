@@ -24,6 +24,9 @@ public enum SSHErrorLocalizer {
         if lower.contains("missing credentials") || lower.contains("缺少登录凭据") {
             return "缺少登录凭据"
         }
+        if lower.contains("failed to parse remote metrics") || lower.contains("无法解析远端指标") {
+            return "无法解析远端指标"
+        }
         let clipped = raw.count <= 160 ? raw : String(raw.prefix(160))
         return "SSH 失败：\(clipped)"
     }

@@ -15,34 +15,27 @@ public final class ProcessSSHCollector: SSHCollecting, @unchecked Sendable {
         self.overallTimeoutSeconds = overallTimeoutSeconds
     }
 
+    static func remoteCommand(hasCache: Bool) -> String {
+        hasCache ? RemoteMetricScripts.collectCommand : RemoteMetricScripts.collectCommandInitial
+    }
+
     public func collect(from server: ServerConfig, credential: SSHCredential) async -> MetricsSnapshot {
         do {
             let cached = cachedSample(for: server.id)
+            let output = try await runSSH(
+                server: server,
+                credential: credential,
+                command: Self.remoteCommand(hasCache: cached != nil)
+            )
             if let cached {
-                let output = try await runSSH(
-                    server: server,
-                    credential: credential,
-                    command: RemoteMetricScripts.collectCommand
-                )
                 guard let current = RemoteMetricScripts.parseSections(output) else {
-                    return .unreachable(
-                        serverID: server.id,
-                        message: SSHErrorLocalizer.message(from: "Failed to parse remote metrics")
-                    )
+                    return parseFailure(serverID: server.id)
                 }
                 storeSample(current, for: server.id)
                 return MetricsParser.parse(serverID: server.id, current: current, previous: cached)
             } else {
-                let output = try await runSSH(
-                    server: server,
-                    credential: credential,
-                    command: RemoteMetricScripts.collectCommandInitial
-                )
                 guard let (sample1, sample2) = RemoteMetricScripts.parseInitialSections(output) else {
-                    return .unreachable(
-                        serverID: server.id,
-                        message: SSHErrorLocalizer.message(from: "Failed to parse remote metrics")
-                    )
+                    return parseFailure(serverID: server.id)
                 }
                 storeSample(sample2, for: server.id)
                 return MetricsParser.parse(
@@ -53,6 +46,7 @@ public final class ProcessSSHCollector: SSHCollecting, @unchecked Sendable {
                 )
             }
         } catch {
+            clearSample(for: server.id)
             return .unreachable(
                 serverID: server.id,
                 message: SSHErrorLocalizer.message(from: error.localizedDescription)
@@ -60,15 +54,29 @@ public final class ProcessSSHCollector: SSHCollecting, @unchecked Sendable {
         }
     }
 
-    private func cachedSample(for serverID: UUID) -> MetricSample? {
+    private func parseFailure(serverID: UUID) -> MetricsSnapshot {
+        clearSample(for: serverID)
+        return .unreachable(
+            serverID: serverID,
+            message: SSHErrorLocalizer.message(from: "无法解析远端指标")
+        )
+    }
+
+    func cachedSample(for serverID: UUID) -> MetricSample? {
         lock.lock()
         defer { lock.unlock() }
         return previousSamples[serverID]
     }
 
-    private func storeSample(_ sample: MetricSample, for serverID: UUID) {
+    func storeSample(_ sample: MetricSample, for serverID: UUID) {
         lock.lock()
         previousSamples[serverID] = sample
+        lock.unlock()
+    }
+
+    func clearSample(for serverID: UUID) {
+        lock.lock()
+        previousSamples[serverID] = nil
         lock.unlock()
     }
 

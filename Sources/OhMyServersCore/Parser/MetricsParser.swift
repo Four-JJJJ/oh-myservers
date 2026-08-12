@@ -78,6 +78,7 @@ public enum MetricsParser {
 
     static func cpuPercent(stat1: String, stat2: String) -> Double? {
         guard let a = cpuTimes(from: stat1), let b = cpuTimes(from: stat2) else { return nil }
+        guard b.total >= a.total, b.idle >= a.idle else { return nil }
         let totalDelta = b.total - a.total
         let idleDelta = b.idle - a.idle
         guard totalDelta > 0 else { return nil }
@@ -166,9 +167,10 @@ public enum MetricsParser {
     static func networkRate(net1: String, net2: String, interval: Double) -> (rx: Double, tx: Double)? {
         guard interval > 0,
               let a = primaryInterfaceCounters(from: net1),
-              let b = primaryInterfaceCounters(from: net2) else { return nil }
-        let rx = Double(b.rx &- a.rx) / interval
-        let tx = Double(b.tx &- a.tx) / interval
+              let b = primaryInterfaceCounters(from: net2),
+              b.rx >= a.rx, b.tx >= a.tx else { return nil }
+        let rx = Double(b.rx - a.rx) / interval
+        let tx = Double(b.tx - a.tx) / interval
         return (max(0, rx), max(0, tx))
     }
 

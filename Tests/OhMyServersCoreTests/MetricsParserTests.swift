@@ -77,6 +77,68 @@ final class MetricsParserTests: XCTestCase {
         XCTAssertEqual(snap.cpuCount, 4)
     }
 
+    func testParseCounterWrapReturnsNilCPUAndNetwork() throws {
+        let previous = try makeSample(
+            procStat: fixture("proc_stat_2.txt"),
+            procNetDev: fixture("proc_net_dev_2.txt")
+        )
+        let current = try makeSample(
+            procStat: fixture("proc_stat_1.txt"),
+            procNetDev: fixture("proc_net_dev_1.txt")
+        )
+        let snap = MetricsParser.parse(
+            serverID: UUID(),
+            current: current,
+            previous: previous,
+            intervalSeconds: 1
+        )
+        XCTAssertNil(snap.cpuPercent)
+        XCTAssertNil(snap.netRxBytesPerSec)
+        XCTAssertNil(snap.netTxBytesPerSec)
+    }
+
+    func testParseUsesSampledAtDeltaWhenIntervalOmitted() throws {
+        let t0 = Date(timeIntervalSince1970: 1_700_000_000)
+        let previous = try makeSample(
+            procStat: fixture("proc_stat_1.txt"),
+            procNetDev: fixture("proc_net_dev_1.txt"),
+            sampledAt: t0
+        )
+        let current = try makeSample(
+            procStat: fixture("proc_stat_2.txt"),
+            procNetDev: fixture("proc_net_dev_2.txt"),
+            sampledAt: t0.addingTimeInterval(2)
+        )
+        let snap = MetricsParser.parse(
+            serverID: UUID(),
+            current: current,
+            previous: previous
+        )
+        XCTAssertEqual(snap.netRxBytesPerSec ?? -1, 2500, accuracy: 0.1)
+        XCTAssertEqual(snap.netTxBytesPerSec ?? -1, 5000, accuracy: 0.1)
+        XCTAssertEqual(snap.cpuPercent ?? -1, 65.625, accuracy: 0.05)
+    }
+
+    func testParseZeroIntervalLeavesCPUAndNetworkNil() throws {
+        let previous = try makeSample(
+            procStat: fixture("proc_stat_1.txt"),
+            procNetDev: fixture("proc_net_dev_1.txt")
+        )
+        let current = try makeSample(
+            procStat: fixture("proc_stat_2.txt"),
+            procNetDev: fixture("proc_net_dev_2.txt")
+        )
+        let snap = MetricsParser.parse(
+            serverID: UUID(),
+            current: current,
+            previous: previous,
+            intervalSeconds: 0
+        )
+        XCTAssertNil(snap.cpuPercent)
+        XCTAssertNil(snap.netRxBytesPerSec)
+        XCTAssertNil(snap.netTxBytesPerSec)
+    }
+
     private func makeSample(
         procStat: String = "",
         procMeminfo: String = "",
