@@ -19,12 +19,6 @@ struct OhMyServersApp: App {
             }
         }
         .menuBarExtraStyle(.window)
-
-        Window("Oh My Servers", id: "settings") {
-            SettingsView()
-                .environmentObject(model)
-                .frame(minWidth: 520, minHeight: 420)
-        }
     }
 
     private var statusColor: Color {

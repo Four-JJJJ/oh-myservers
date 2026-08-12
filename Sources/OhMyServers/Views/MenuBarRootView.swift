@@ -15,7 +15,6 @@ private enum Graphite {
 
 struct MenuBarRootView: View {
     @EnvironmentObject private var model: AppModel
-    @Environment(\.openWindow) private var openWindow
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -25,7 +24,7 @@ struct MenuBarRootView: View {
                     .foregroundStyle(Graphite.text)
                 Spacer()
                 Button("Settings") {
-                    openWindow(id: "settings")
+                    SettingsWindow.present(model: model)
                 }
                 .buttonStyle(.plain)
                 .foregroundStyle(Graphite.muted)
