@@ -1,6 +1,22 @@
 import Foundation
 import OhMyServersCore
-import UserNotifications
+import Combine
+
+/// Thread-safe snapshot of server list for the poller.
+final class ServerListBox: @unchecked Sendable {
+    private let lock = NSLock()
+    private var servers: [ServerConfig] = []
+
+    func get() -> [ServerConfig] {
+        lock.lock(); defer { lock.unlock() }
+        return servers
+    }
+
+    func set(_ value: [ServerConfig]) {
+        lock.lock(); defer { lock.unlock() }
+        servers = value
+    }
+}
 
 @MainActor
 final class AppModel: ObservableObject {
@@ -13,18 +29,19 @@ final class AppModel: ObservableObject {
     private let credentials: CredentialStore
     private let aggregator = StatusAggregator()
     private let notifications = NotificationService()
+    private let serverList = ServerListBox()
     private var scheduler: PollScheduler?
 
     init() {
         do {
             store = try ServerStore.defaultStore()
         } catch {
-            // Fallback to temp if Application Support fails — still allow UI.
             let url = FileManager.default.temporaryDirectory.appendingPathComponent("ohmyservers-servers.json")
             store = try! ServerStore(fileURL: url)
         }
         credentials = CredentialStore()
         servers = store.list()
+        serverList.set(servers)
         refreshTitle()
         startMonitoring()
         Task { await notifications.requestAuthorization() }
@@ -35,30 +52,35 @@ final class AppModel: ObservableObject {
     }
 
     func startMonitoring() {
+        let credentials = self.credentials
+        let serverList = self.serverList
         let scheduler = PollScheduler(
             collector: CitadelSSHCollector(),
             intervalSeconds: 15
-        ) { [credentials] server in
+        ) { server in
             Self.credential(for: server, credentials: credentials)
         }
         self.scheduler = scheduler
         Task {
-            await scheduler.start(serversProvider: { [weak self] in
-                MainActor.assumeIsolated { self?.servers ?? [] }
-            }, onUpdate: { [weak self] snaps, events in
-                Task { @MainActor in
-                    self?.snapshots = snaps
-                    self?.refreshTitle()
-                    for event in events {
-                        self?.notifications.post(title: event.title, body: event.body)
+            await scheduler.start(
+                serversProvider: { serverList.get() },
+                onUpdate: { [weak self] snaps, events in
+                    Task { @MainActor in
+                        guard let self else { return }
+                        self.snapshots = snaps
+                        self.refreshTitle()
+                        for event in events {
+                            self.notifications.post(title: event.title, body: event.body)
+                        }
                     }
                 }
-            })
+            )
         }
     }
 
     func reloadServersFromDisk() {
         servers = store.list()
+        serverList.set(servers)
         refreshTitle()
     }
 
@@ -80,16 +102,16 @@ final class AppModel: ObservableObject {
         reloadServersFromDisk()
     }
 
-    private static func credential(for server: ServerConfig, credentials: CredentialStore) -> SSHCredential? {
+    nonisolated private static func credential(for server: ServerConfig, credentials: CredentialStore) -> SSHCredential? {
         switch server.authMethod {
         case .password:
             guard let password = try? credentials.load(serverID: server.id, kind: .password),
-                  let password, !password.isEmpty else { return nil }
+                  !password.isEmpty else { return nil }
             return .password(password)
         case .privateKey:
             guard let path = server.privateKeyPath, !path.isEmpty else { return nil }
             let phrase = try? credentials.load(serverID: server.id, kind: .keyPassphrase)
-            return .privateKey(path: path, passphrase: phrase ?? nil)
+            return .privateKey(path: path, passphrase: phrase)
         }
     }
 }
