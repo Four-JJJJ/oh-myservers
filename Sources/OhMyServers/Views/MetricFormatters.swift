@@ -6,13 +6,6 @@ enum MetricFormatters {
     private static let bytesPerGB: Double = 1_073_741_824
     private static let bytesPerMB: Double = 1_048_576
 
-    static func relativeTime(from date: Date, now: Date) -> String {
-        let seconds = now.timeIntervalSince(date)
-        if seconds < 5 { return L10n.justNow }
-        if seconds < 60 { return "\(max(0, Int(seconds)))\(L10n.secondsAgo)" }
-        return "\(max(1, Int(seconds / 60)))\(L10n.minutesAgo)"
-    }
-
     static func usageText(used: UInt64?, total: UInt64?, percent: Double?) -> String {
         if let used, let total, total > 0 {
             if Double(total) >= bytesPerGB {

@@ -53,22 +53,13 @@ struct MenuBarRootView: View {
 
             HStack(spacing: 16) {
                 HStack(spacing: 8) {
+                    headerButton(L10n.refresh, disabled: model.isRefreshing) {
+                        model.refreshNow()
+                    }
                     ProgressView()
                         .controlSize(.small)
                         .frame(width: 12, height: 12)
                         .opacity(model.isRefreshing ? 1 : 0)
-                    headerButton(L10n.refresh, disabled: model.isRefreshing) {
-                        model.refreshNow()
-                    }
-                    if latestEnabledSnapshotDate != nil {
-                        TimelineView(.periodic(from: .now, by: 1)) { context in
-                            if let date = latestEnabledSnapshotDate {
-                                Text(MetricFormatters.relativeTime(from: date, now: context.date))
-                                    .font(.system(size: 11, weight: .medium).monospacedDigit())
-                                    .foregroundStyle(Graphite.muted)
-                            }
-                        }
-                    }
                 }
                 Spacer()
                 headerButton(L10n.quit) { NSApplication.shared.terminate(nil) }
@@ -82,14 +73,6 @@ struct MenuBarRootView: View {
         .onAppear { model.refreshNow() }
     }
 
-    private var latestEnabledSnapshotDate: Date? {
-        let enabledIDs = Set(model.servers.filter(\.isEnabled).map(\.id))
-        return model.snapshots.values
-            .filter { enabledIDs.contains($0.serverID) }
-            .map(\.collectedAt)
-            .max()
-    }
-
     private func headerButton(
         _ title: String,
         disabled: Bool = false,
@@ -100,15 +83,13 @@ struct MenuBarRootView: View {
                 .font(.system(size: 11, weight: .medium))
                 .foregroundStyle(Graphite.muted.opacity(disabled ? 0.4 : 1))
         }
-        .buttonStyle(.borderless)
+        .buttonStyle(.plain)
         .disabled(disabled)
     }
 }
 
 /// One server block inside the shared demo card.
 struct ServerBlockView: View {
-    @EnvironmentObject private var model: AppModel
-
     let server: ServerConfig
     let snapshot: MetricsSnapshot?
 
@@ -122,12 +103,6 @@ struct ServerBlockView: View {
                 Text(statusText)
                     .font(.system(size: 12, weight: .regular))
                     .foregroundStyle(statusColor)
-                Button(action: { model.openInTerminal(server: server) }) {
-                    Text(L10n.terminal)
-                        .font(.system(size: 11, weight: .medium))
-                        .foregroundStyle(Graphite.muted)
-                }
-                .buttonStyle(.borderless)
             }
 
             if let snapshot, snapshot.isReachable {
