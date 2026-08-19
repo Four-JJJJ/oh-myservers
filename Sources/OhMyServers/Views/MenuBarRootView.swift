@@ -7,6 +7,7 @@ struct MenuBarRootView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
+            let enabledServers = model.servers.filter(\.isEnabled)
             HStack(spacing: 8) {
                 Image(systemName: "server.rack")
                     .font(.system(size: 12, weight: .semibold))
@@ -23,15 +24,15 @@ struct MenuBarRootView: View {
             .padding(.top, 12)
             .padding(.bottom, 10)
 
-            if model.servers.isEmpty {
+            if model.servers.isEmpty && KomariWebStore.defaultURL == nil {
                 Text(L10n.noServersHint)
                     .font(.system(size: 12))
                     .foregroundStyle(Graphite.muted)
                     .padding(.horizontal, 14)
                     .padding(.bottom, 14)
-            } else {
+            } else if !enabledServers.isEmpty {
                 VStack(alignment: .leading, spacing: 0) {
-                    ForEach(Array(model.servers.enumerated()), id: \.element.id) { index, server in
+                    ForEach(Array(enabledServers.enumerated()), id: \.element.id) { index, server in
                         if index > 0 {
                             Rectangle()
                                 .fill(Graphite.divider)
@@ -51,6 +52,10 @@ struct MenuBarRootView: View {
                 .padding(.bottom, 12)
             }
 
+            if let komariURL = KomariWebStore.defaultURL {
+                KomariSection(url: komariURL)
+            }
+
             HStack(spacing: 16) {
                 HStack(spacing: 8) {
                     headerButton(L10n.refresh, disabled: model.isRefreshing) {
@@ -67,7 +72,7 @@ struct MenuBarRootView: View {
             .padding(.horizontal, 14)
             .padding(.bottom, 12)
         }
-        .frame(width: 320)
+        .frame(width: 760)
         .background(Graphite.bg)
         .preferredColorScheme(.dark)
         .onAppear { model.refreshNow() }
@@ -85,6 +90,20 @@ struct MenuBarRootView: View {
         }
         .buttonStyle(.plain)
         .disabled(disabled)
+    }
+}
+
+/// Komari embed section; observes the shared store so height updates
+/// re-render without recreating the web view.
+private struct KomariSection: View {
+    let url: URL
+    @ObservedObject private var store = KomariWebStore.shared
+
+    var body: some View {
+        KomariWebView(url: url)
+            .frame(height: store.contentHeight)
+            .padding(.horizontal, 14)
+            .padding(.bottom, 12)
     }
 }
 

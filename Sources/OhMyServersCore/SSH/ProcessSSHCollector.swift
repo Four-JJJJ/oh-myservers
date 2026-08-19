@@ -15,6 +15,10 @@ public final class ProcessSSHCollector: SSHCollecting, @unchecked Sendable {
         self.overallTimeoutSeconds = overallTimeoutSeconds
     }
 
+    static let controlPath = "/tmp/ohmyservers-%C"
+    static let serverAliveInterval = 30
+    static let serverAliveCountMax = 3
+    static let muxExitTimeoutSeconds: TimeInterval = 2
     static let maxSampleAgeSeconds: TimeInterval = 120
 
     static func isUsableCache(
@@ -58,7 +62,6 @@ public final class ProcessSSHCollector: SSHCollecting, @unchecked Sendable {
                 )
             }
         } catch {
-            clearSample(for: server.id)
             return .unreachable(
                 serverID: server.id,
                 message: SSHErrorLocalizer.message(from: error.localizedDescription)
@@ -93,6 +96,32 @@ public final class ProcessSSHCollector: SSHCollecting, @unchecked Sendable {
     }
 
     private func runSSH(server: ServerConfig, credential: SSHCredential, command: String) async throws -> String {
+        var lastError: Error?
+        for attempt in 0..<2 {
+            let started = Date()
+            do {
+                return try await runSSHOnce(server: server, credential: credential, command: command)
+            } catch {
+                lastError = error
+                Self.exitMux(server: server)
+                let elapsed = Date().timeIntervalSince(started)
+                if attempt == 0, SSHRetryPolicy.shouldRetry(
+                    elapsed: elapsed,
+                    message: error.localizedDescription
+                ) {
+                    continue
+                }
+                throw error
+            }
+        }
+        throw lastError ?? ProcessSSHError.failed("连接超时")
+    }
+
+    private func runSSHOnce(
+        server: ServerConfig,
+        credential: SSHCredential,
+        command: String
+    ) async throws -> String {
         try await withCheckedThrowingContinuation { continuation in
             DispatchQueue.global(qos: .userInitiated).async {
                 do {
@@ -126,10 +155,10 @@ public final class ProcessSSHCollector: SSHCollecting, @unchecked Sendable {
             "-o", "StrictHostKeyChecking=accept-new",
             "-o", "LogLevel=ERROR",
             "-o", "ControlMaster=auto",
-            "-o", "ControlPath=/tmp/ohmyservers-%C",
+            "-o", "ControlPath=\(controlPath)",
             "-o", "ControlPersist=120",
-            "-o", "ServerAliveInterval=5",
-            "-o", "ServerAliveCountMax=2",
+            "-o", "ServerAliveInterval=\(serverAliveInterval)",
+            "-o", "ServerAliveCountMax=\(serverAliveCountMax)",
             "-p", String(server.port)
         ]
 
@@ -211,6 +240,38 @@ public final class ProcessSSHCollector: SSHCollecting, @unchecked Sendable {
             throw ProcessSSHError.failed(message)
         }
         return out
+    }
+
+    static func exitMux(server: ServerConfig) {
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/ssh")
+        process.arguments = [
+            "-O", "exit",
+            "-o", "ControlPath=\(controlPath)",
+            "-o", "ConnectTimeout=2",
+            "-p", String(server.port),
+            "\(server.username)@\(server.host)"
+        ]
+        process.standardOutput = Pipe()
+        process.standardError = Pipe()
+        let group = DispatchGroup()
+        group.enter()
+        process.terminationHandler = { _ in
+            group.leave()
+        }
+        do {
+            try process.run()
+        } catch {
+            group.leave()
+            return
+        }
+        if group.wait(timeout: .now() + muxExitTimeoutSeconds) == .timedOut {
+            process.terminate()
+            if process.isRunning {
+                kill(process.processIdentifier, SIGKILL)
+            }
+            process.waitUntilExit()
+        }
     }
 
     private static func writeAskpass(password: String) throws -> URL {

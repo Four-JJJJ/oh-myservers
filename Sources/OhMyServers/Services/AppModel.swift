@@ -23,6 +23,7 @@ final class ServerListBox: @unchecked Sendable {
 final class AppModel: ObservableObject {
     @Published var servers: [ServerConfig] = []
     @Published var snapshots: [UUID: MetricsSnapshot] = [:]
+    @Published var komariNodes: [KomariNodeStatus] = []
     @Published var menuBarTitle: String = "No servers"
     @Published var showSettings = false
     @Published var isRefreshing = false
@@ -37,6 +38,8 @@ final class AppModel: ObservableObject {
     private let serverList = ServerListBox()
     private var scheduler: PollScheduler?
     private var wakeObserver: NSObjectProtocol?
+    private let komariClient: KomariClient?
+    private var komariTask: Task<Void, Never>?
 
     init() {
         do {
@@ -46,17 +49,46 @@ final class AppModel: ObservableObject {
             store = try! ServerStore(fileURL: url)
         }
         credentials = CredentialStore()
+        komariClient = KomariClient(baseURLString: Self.komariBaseURLString())
         servers = store.list()
         serverList.set(servers)
         pollIntervalSeconds = Self.resolvedPollIntervalSeconds()
         refreshTitle()
         startMonitoring()
+        startKomariPolling()
         observeWake()
         Task { await notifications.requestAuthorization() }
     }
 
+    static func komariBaseURLString() -> String {
+        UserDefaults.standard.string(forKey: "komariBaseURL") ?? "https://komari.fourj.ccwu.cc"
+    }
+
     func refreshTitle() {
-        menuBarTitle = aggregator.menuBarTitle(servers: servers, snapshots: snapshots)
+        if servers.contains(where: \.isEnabled) {
+            menuBarTitle = aggregator.menuBarTitle(servers: servers, snapshots: snapshots)
+        } else if !komariNodes.isEmpty {
+            menuBarTitle = aggregator.menuBarTitle(komariNodes: komariNodes)
+        } else {
+            menuBarTitle = komariClient != nil ? "…" : "无服务器"
+        }
+    }
+
+    private func startKomariPolling() {
+        guard let client = komariClient else { return }
+        komariTask = Task { [weak self] in
+            while !Task.isCancelled {
+                await self?.pollKomari(client: client)
+                let interval = self?.pollIntervalSeconds ?? 15
+                try? await Task.sleep(nanoseconds: UInt64(interval * 1_000_000_000))
+            }
+        }
+    }
+
+    private func pollKomari(client: KomariClient) async {
+        guard let status = try? await client.fetchStatus() else { return }
+        komariNodes = status
+        refreshTitle()
     }
 
     func startMonitoring() {
@@ -97,6 +129,9 @@ final class AppModel: ObservableObject {
         let servers = serverList.get()
         Task {
             await scheduler?.refresh(servers: servers)
+        }
+        if let komariClient {
+            Task { await pollKomari(client: komariClient) }
         }
     }
 

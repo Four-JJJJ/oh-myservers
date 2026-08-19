@@ -10,6 +10,7 @@ public actor PollScheduler {
     private var onUpdate: (@Sendable ([UUID: MetricsSnapshot], [AlertEvent]) -> Void)?
     private var onRefreshing: (@Sendable (Bool) -> Void)?
     private var isPolling = false
+    private var gate = ReachabilityGate()
 
     public init(
         collector: any SSHCollecting,
@@ -86,6 +87,15 @@ public actor PollScheduler {
                 next[snap.serverID] = snap
             }
         }
+
+        var gated: [UUID: MetricsSnapshot] = [:]
+        for server in enabled {
+            if let raw = next[server.id] {
+                gated[server.id] = gate.accept(raw)
+            }
+        }
+        gate.prune(keeping: Set(enabled.map(\.id)))
+        next = gated
 
         let prev = previous.isEmpty ? latest : previous
         previous = latest

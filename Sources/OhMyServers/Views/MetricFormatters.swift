@@ -62,4 +62,20 @@ enum MetricFormatters {
         }
         return snapshot.diskUsedPercent
     }
+
+    static func rateText(_ bytesPerSec: Double?) -> String {
+        guard let bytesPerSec else { return "—" }
+        if bytesPerSec >= 1_000_000 { return String(format: "%.1fM", bytesPerSec / 1_000_000) }
+        if bytesPerSec >= 1_000 { return String(format: "%.1fK", bytesPerSec / 1_000) }
+        return String(format: "%.0fB", bytesPerSec)
+    }
+
+    static func uptimeText(seconds: UInt64?) -> String {
+        guard let sec = seconds else { return "—" }
+        let days = sec / 86_400
+        let hours = (sec % 86_400) / 3600
+        if days > 0 { return "\(days)天\(hours)时" }
+        let mins = (sec % 3600) / 60
+        return "\(hours)时\(mins)分"
+    }
 }

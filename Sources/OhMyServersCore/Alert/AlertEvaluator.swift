@@ -23,7 +23,7 @@ public struct AlertEvaluator {
         var events: [AlertEvent] = []
 
         for server in servers where server.isEnabled {
-            let wasReachable = previous[server.id]?.isReachable ?? true
+            let wasReachable = previous[server.id]?.isReachable ?? false
             let isReachable = current[server.id]?.isReachable ?? false
             if wasReachable && !isReachable {
                 let detail = current[server.id]?.errorMessage ?? "连接失败"
@@ -39,7 +39,7 @@ public struct AlertEvaluator {
         let aggregator = StatusAggregator()
         let wasAbnormal = aggregator.overallIsAbnormal(snapshots: prevSnaps)
         let isAbnormal = aggregator.overallIsAbnormal(snapshots: currSnaps)
-        if !wasAbnormal && isAbnormal {
+        if !wasAbnormal && isAbnormal && !prevSnaps.isEmpty {
             if events.isEmpty {
                 events.append(AlertEvent(
                     title: "服务器状态异常",

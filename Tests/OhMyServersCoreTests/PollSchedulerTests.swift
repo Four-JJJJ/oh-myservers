@@ -30,6 +30,25 @@ private final class DelayCollector: SSHCollecting, @unchecked Sendable {
     }
 }
 
+private final class SequenceCollector: SSHCollecting, @unchecked Sendable {
+    private let lock = OSAllocatedUnfairLock(initialState: 0)
+    let snapshots: [MetricsSnapshot]
+
+    init(snapshots: [MetricsSnapshot]) {
+        self.snapshots = snapshots
+    }
+
+    func collect(from server: ServerConfig, credential: SSHCredential) async -> MetricsSnapshot {
+        let i = lock.withLock { idx -> Int in
+            let current = idx
+            idx += 1
+            return current
+        }
+        if i < snapshots.count { return snapshots[i] }
+        return snapshots.last ?? .unreachable(serverID: server.id, message: "empty")
+    }
+}
+
 private final class Box<T>: @unchecked Sendable {
     private let lock = OSAllocatedUnfairLock<[T]>(initialState: [])
 
@@ -140,5 +159,73 @@ final class PollSchedulerTests: XCTestCase {
         await fulfillment(of: [expectation], timeout: 2)
         await scheduler.stop()
         XCTAssertEqual(flags.snapshot, [true, false])
+    }
+
+    func testOneFailureAfterSuccessStaysReachableAndSilent() async {
+        let server = ServerConfig(name: "HK", host: "hk", username: "u", label: "HK", authMethod: .password)
+        let good = MetricsSnapshot(serverID: server.id, isReachable: true, cpuPercent: 19)
+        let collector = SequenceCollector(snapshots: [
+            good,
+            .unreachable(serverID: server.id, message: "连接超时")
+        ])
+        let scheduler = PollScheduler(collector: collector, intervalSeconds: 60) { _ in
+            .password("x")
+        }
+        let updates = Box<([UUID: MetricsSnapshot], [AlertEvent])>()
+        let first = expectation(description: "first update")
+        let second = expectation(description: "second update")
+        await scheduler.start(serversProvider: { [server] }) { snaps, events in
+            updates.append((snaps, events))
+            switch updates.snapshot.count {
+            case 1: first.fulfill()
+            case 2: second.fulfill()
+            default: break
+            }
+        }
+        await fulfillment(of: [first], timeout: 2)
+        await scheduler.refresh(servers: [server])
+        await fulfillment(of: [second], timeout: 2)
+        await scheduler.stop()
+
+        XCTAssertEqual(updates.snapshot.count, 2)
+        XCTAssertEqual(updates.snapshot[1].0[server.id]?.cpuPercent, 19)
+        XCTAssertTrue(updates.snapshot[1].0[server.id]?.isReachable ?? false)
+        XCTAssertTrue(updates.snapshot[1].1.isEmpty)
+    }
+
+    func testTwoFailuresAfterSuccessGoOfflineAndNotify() async {
+        let server = ServerConfig(name: "HK", host: "hk", username: "u", label: "HK", authMethod: .password)
+        let good = MetricsSnapshot(serverID: server.id, isReachable: true, cpuPercent: 19)
+        let collector = SequenceCollector(snapshots: [
+            good,
+            .unreachable(serverID: server.id, message: "t1"),
+            .unreachable(serverID: server.id, message: "t2")
+        ])
+        let scheduler = PollScheduler(collector: collector, intervalSeconds: 60) { _ in
+            .password("x")
+        }
+        let updates = Box<([UUID: MetricsSnapshot], [AlertEvent])>()
+        let first = expectation(description: "first update")
+        let second = expectation(description: "second update")
+        let third = expectation(description: "third update")
+        await scheduler.start(serversProvider: { [server] }) { snaps, events in
+            updates.append((snaps, events))
+            switch updates.snapshot.count {
+            case 1: first.fulfill()
+            case 2: second.fulfill()
+            case 3: third.fulfill()
+            default: break
+            }
+        }
+        await fulfillment(of: [first], timeout: 2)
+        await scheduler.refresh(servers: [server])
+        await fulfillment(of: [second], timeout: 2)
+        await scheduler.refresh(servers: [server])
+        await fulfillment(of: [third], timeout: 2)
+        await scheduler.stop()
+
+        XCTAssertEqual(updates.snapshot.count, 3)
+        XCTAssertFalse(updates.snapshot[2].0[server.id]?.isReachable ?? true)
+        XCTAssertTrue(updates.snapshot[2].1.contains(where: { $0.title.contains("离线") }))
     }
 }

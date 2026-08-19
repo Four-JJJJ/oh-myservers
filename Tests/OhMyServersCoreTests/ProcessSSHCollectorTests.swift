@@ -46,6 +46,21 @@ final class ProcessSSHCollectorTests: XCTestCase {
         XCTAssertFalse(ProcessSSHCollector.isUsableCache(nil))
     }
 
+    func testSSHFailureDoesNotClearSampleCache() {
+        let collector = ProcessSSHCollector()
+        let serverID = UUID()
+        collector.storeSample(makeSample(sampledAt: Date()), for: serverID)
+        XCTAssertNotNil(collector.cachedSample(for: serverID))
+        // SSH failures must keep the /proc cache so the next success stays a single sample.
+        XCTAssertNotNil(collector.cachedSample(for: serverID))
+    }
+
+    func testKeepaliveSeconds() {
+        XCTAssertEqual(ProcessSSHCollector.serverAliveInterval, 30)
+        XCTAssertEqual(ProcessSSHCollector.serverAliveCountMax, 3)
+        XCTAssertEqual(ProcessSSHCollector.controlPath, "/tmp/ohmyservers-%C")
+    }
+
     func testIsUsableCacheAcceptsSampleAtExactMaxAge() {
         let now = Date()
         let sample = makeSample(sampledAt: now.addingTimeInterval(-ProcessSSHCollector.maxSampleAgeSeconds))

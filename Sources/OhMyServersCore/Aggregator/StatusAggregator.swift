@@ -18,6 +18,20 @@ public struct StatusAggregator {
         .joined(separator: " · ")
     }
 
+    /// Builds menu bar title from Komari nodes like `HK 23% · US 41%`.
+    public func menuBarTitle(komariNodes: [KomariNodeStatus]) -> String {
+        guard !komariNodes.isEmpty else { return "无服务器" }
+
+        return komariNodes.map { node in
+            let label = String(node.info.name.prefix(2)).uppercased()
+            guard node.isOnline, let cpu = node.report?.cpuUsagePercent else {
+                return "\(label) —"
+            }
+            return "\(label) \(Int(cpu.rounded()))%"
+        }
+        .joined(separator: " · ")
+    }
+
     public func overallIsAbnormal(snapshots: [MetricsSnapshot]) -> Bool {
         guard !snapshots.isEmpty else { return false }
         return snapshots.contains { $0.health != .online }

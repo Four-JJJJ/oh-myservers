@@ -24,6 +24,13 @@ final class AlertEvaluatorTests: XCTestCase {
         XCTAssertTrue(events.isEmpty)
     }
 
+    func testNoNotifyWhenNeverReachable() {
+        let server = ServerConfig(name: "HK", host: "hk", username: "u", label: "HK", authMethod: .password)
+        let curr = [server.id: MetricsSnapshot.unreachable(serverID: server.id, message: "连接超时")]
+        let events = AlertEvaluator().evaluate(servers: [server], previous: [:], current: curr)
+        XCTAssertTrue(events.isEmpty)
+    }
+
     func testNotifyOnHighLoadEdgeWithoutOffline() {
         let server = ServerConfig(name: "US", host: "us", username: "u", label: "US", authMethod: .password)
         let prev: [UUID: MetricsSnapshot] = [

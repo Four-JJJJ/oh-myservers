@@ -5,6 +5,14 @@ import OhMyServersCore
 struct OhMyServersApp: App {
     @StateObject private var model = AppModel()
 
+    init() {
+        // Warm the Komari web view in the background so the first popover
+        // open renders immediately instead of loading the SPA on click.
+        DispatchQueue.main.async {
+            KomariWebStore.shared.preload()
+        }
+    }
+
     var body: some Scene {
         MenuBarExtra {
             MenuBarRootView()
@@ -24,7 +32,11 @@ struct OhMyServersApp: App {
 
     private var statusColor: Color {
         let enabled = model.servers.filter(\.isEnabled)
-        guard !enabled.isEmpty else { return Graphite.muted }
+        if enabled.isEmpty {
+            let nodes = model.komariNodes
+            guard !nodes.isEmpty else { return Graphite.muted }
+            return nodes.allSatisfy(\.isOnline) ? Graphite.online : Graphite.offline
+        }
         let healths = enabled.map { model.snapshots[$0.id]?.health ?? .offline }
         if healths.contains(.offline) { return Graphite.offline }
         if healths.contains(.high) { return Graphite.high }
