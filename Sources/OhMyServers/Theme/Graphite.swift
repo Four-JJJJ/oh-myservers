@@ -1,3 +1,4 @@
+import OhMyServersCore
 import SwiftUI
 
 enum Graphite {
@@ -20,58 +21,42 @@ enum L10n {
     static let settings = "设置"
     static let refresh = "刷新"
     static let quit = "退出"
-    static let noServers = "还没有服务器"
-    static let noServersHint = "打开设置添加香港 / 美国等主机"
-    static let waitingSample = "正在采集…"
     static let online = "在线"
-    static let high = "偏高"
     static let offline = "离线"
-    static let cpu = "CPU"
-    static let mem = "MEM"
-    static let load = "负载"
-    static let disk = "磁盘"
-    static let net = "Net"
-    static let netIn = "下行"
-    static let netOut = "上行"
-    static let uptime = "运行"
-    static let servers = "服务器"
+    static let komariSites = "Komari 站点"
+    static let noSites = "还没有站点"
+    static let noSitesHint = "打开设置，添加 Komari 站点地址"
+    static let siteURL = "站点地址"
+    static let siteURLHint = "https://komari.example.com"
+    static let nameOptional = "名称（可选）"
+    static let invalidURL = "地址格式不正确"
     static let add = "添加"
     static let delete = "删除"
     static let save = "保存"
-    static let basic = "基本信息"
-    static let auth = "登录方式"
-    static let name = "名称"
-    static let label = "摘要标签"
-    static let host = "主机"
-    static let port = "端口"
-    static let username = "用户名"
-    static let enabled = "启用监控"
-    static let password = "密码"
-    static let privateKey = "私钥"
-    static let keyPath = "私钥路径"
-    static let browse = "选择…"
-    static let passphrase = "私钥口令"
-    static let keepPassword = "编辑已有服务器时留空，可保留原密码"
-    static let passphraseOptional = "可选；未加密私钥可留空"
-    static let selectServer = "选择左侧服务器，或点击添加"
-    static let requiredFields = "请填写名称、标签、主机和用户名"
-    static let passwordRequired = "新服务器需要填写密码"
-    static let keyRequired = "请填写私钥路径"
-    static let authPassword = "密码登录"
-    static let authKey = "密钥登录"
-    static let terminal = "终端"
     static let monitoring = "监控"
     static let pollInterval = "刷新间隔"
     static let launchAtLogin = "开机自启"
     static let launchAtLoginFailed = "无法设置开机自启，请在系统设置中允许"
     static let cancel = "取消"
-    static let unsaved = "未保存"
+    static let menuBarDisplay = "菜单栏显示"
+    static let allServers = "全部服务器"
+    static let menuBarNoNodes = "暂无服务器数据"
+    static let preview = "预览"
+
+    static func menuBarMetricName(_ metric: MenuBarMetric) -> String {
+        switch metric {
+        case .cpu: "CPU"
+        case .memory: "内存"
+        case .load: "负载"
+        case .disk: "磁盘"
+        case .networkUp: "上行"
+        case .networkDown: "下行"
+        case .uptime: "运行时间"
+        case .process: "进程数"
+        }
+    }
 
     static func pollIntervalOption(_ seconds: Int) -> String {
         "\(seconds) 秒"
-    }
-
-    static func deleteConfirm(_ name: String) -> String {
-        "确定删除「\(name)」？此操作不可撤销。"
     }
 }

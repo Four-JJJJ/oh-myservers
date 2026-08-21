@@ -18,7 +18,7 @@ enum SettingsWindow {
 
         let root = SettingsView()
             .environmentObject(model)
-            .frame(minWidth: 560, minHeight: 440)
+            .frame(minWidth: 560, minHeight: 420)
         let hosting = NSHostingController(rootView: root)
         let window = NSWindow(contentViewController: hosting)
         window.title = "Oh My Servers · 设置"
@@ -26,7 +26,7 @@ enum SettingsWindow {
         window.titlebarAppearsTransparent = true
         window.appearance = NSAppearance(named: .darkAqua)
         window.styleMask = [.titled, .closable, .miniaturizable, .resizable]
-        window.setContentSize(NSSize(width: 560, height: 440))
+        window.setContentSize(NSSize(width: 560, height: 480))
         window.center()
         window.isReleasedWhenClosed = false
         let closer = WindowCloser {

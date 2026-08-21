@@ -1,24 +1,22 @@
 # Oh My Servers
 
-macOS 菜单栏应用：通过 SSH（无 Agent）查看 Linux 服务器实时状态。风格参考 ServerCat，界面为 Graphite 深色紧凑风。
+macOS 菜单栏应用：添加任意公开 Komari 监控站点的地址，就能在菜单栏弹窗里直接看它的服务器卡片。支持多个站点，Graphite 深色紧凑风。
 
-## 功能（v0.1）
+## 功能
 
-- 菜单栏摘要：如 `HK 23% · US 41%`
-- 多服务器管理；密码 / 私钥（Ed25519、RSA）登录
-- 指标：CPU、按核着色的负载、内存 / 磁盘已用与总量、网络吞吐、uptime / 连通性
-- 壁钟刷新：默认 15 秒，可在设置中改为 5 / 15 / 30 / 60 秒；采集耗时从间隔中扣除
-- 唤醒后立刻再采一轮
-- 连通失败或整体异常时边沿触发系统通知
+- 添加 / 删除多个 Komari 站点地址（任何公开实例都可以用，不需要自己部署）
+- 菜单栏弹窗内嵌站点卡片，实时刷新，样式与 Komari 网页一致
+- 菜单栏摘要：如 `HK 23% · US 41%`，附整体在线状态点
+- 刷新间隔可选 5 / 15 / 30 / 60 秒；睡眠唤醒后立刻再采一轮
 - 开机自启（系统允许时）
-- 「终端」在系统「终端」App 中执行 `ssh`，不是内置终端
 - 本地 ad-hoc 签名即可使用，无需 Apple 开发者账号
+
+> 说明：站点的 `/api/nodes` 与 `/api/clients` 是 Komari 前端的公开接口。对方若把站点设为私有（公开页关闭）或加了拦截防护，卡片和摘要都会取不到数据。
 
 ## 要求
 
 - macOS 14+
 - Xcode / Swift 5.9+ 命令行工具
-- 目标服务器为 Linux（读 `/proc`）
 
 ## 本地运行
 
@@ -43,23 +41,12 @@ python3 Scripts/generate-app-icon.py
 ## 使用
 
 1. 点击菜单栏摘要 → **设置**
-2. **添加**服务器：填写名称、摘要标签（如 `HK` / `US`）、主机、用户名
-3. 选择密码或密钥登录，保存
-4. 按所选刷新间隔出现指标（默认约 15 秒）；离线会变红并通知一次
-5. 需要时打开「终端」连上该主机，或在「监控」里调整刷新间隔 / 开机自启
+2. 粘贴一个 Komari 站点地址（如 `https://komari.example.com`，可不带 scheme），可选填名称，点 **+**
+3. 菜单栏弹窗即刻出现该站点的卡片；再加几个地址就按站点分组上下排列
+4. 底部可调整刷新间隔与开机自启；站点行内开关可临时停用
 
-凭据保存在 macOS Keychain（`app.ohmyservers.credentials`）；服务器列表在  
-`~/Library/Application Support/OhMyServers/servers.json`。
-
-## 明确不做（一期）
-
-内置终端、历史曲线、Docker/GPU、阈值告警、跳板机。
+站点列表保存在 UserDefaults（`komariSites`）。
 
 ## GitHub 分发（可选）
 
 无开发者账号时可用 GitHub Releases 提供 `.app` zip，并在 Release 说明里写清：用户需右键打开或自行 `codesign --sign -`。若以后有开发者账号，再补公证（notarization）。
-
-## 架构摘要
-
-详见 `docs/superpowers/specs/2026-08-12-oh-myservers-design.md` 与实现计划  
-`docs/superpowers/plans/2026-08-12-oh-myservers.md`。

@@ -6,10 +6,11 @@ struct OhMyServersApp: App {
     @StateObject private var model = AppModel()
 
     init() {
-        // Warm the Komari web view in the background so the first popover
-        // open renders immediately instead of loading the SPA on click.
+        // Warm the Komari web views in the background so the first popover
+        // open renders immediately instead of loading each SPA on click.
         DispatchQueue.main.async {
-            KomariWebStore.shared.preload()
+            let sites = KomariSiteStore().list().filter(\.isEnabled)
+            KomariWebStore.shared.preload(sites: sites)
         }
     }
 
@@ -18,7 +19,6 @@ struct OhMyServersApp: App {
             MenuBarRootView()
                 .environmentObject(model)
         } label: {
-            // Demo style: status dot + summary text
             HStack(spacing: 5) {
                 Circle()
                     .fill(statusColor)
@@ -31,16 +31,8 @@ struct OhMyServersApp: App {
     }
 
     private var statusColor: Color {
-        let enabled = model.servers.filter(\.isEnabled)
-        if enabled.isEmpty {
-            let nodes = model.komariNodes
-            guard !nodes.isEmpty else { return Graphite.muted }
-            return nodes.allSatisfy(\.isOnline) ? Graphite.online : Graphite.offline
-        }
-        let healths = enabled.map { model.snapshots[$0.id]?.health ?? .offline }
-        if healths.contains(.offline) { return Graphite.offline }
-        if healths.contains(.high) { return Graphite.high }
-        if healths.allSatisfy({ $0 == .online }) { return Graphite.online }
-        return Graphite.muted
+        let nodes = model.nodeStatuses
+        guard !nodes.isEmpty else { return Graphite.muted }
+        return nodes.allSatisfy(\.isOnline) ? Graphite.online : Graphite.offline
     }
 }

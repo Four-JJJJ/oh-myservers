@@ -1,31 +1,42 @@
 import AppKit
+import OhMyServersCore
 import SwiftUI
 import WebKit
 
-/// Shared, preloaded Komari web view. The WKWebView is created once and reused
-/// across popover opens, so the menu shows live cards instantly instead of
-/// reloading the whole Komari SPA (JS bundle + WebSocket handshake) every time.
+/// Shared, preloaded Komari web views, one per site. WKWebViews are created once
+/// and reused across popover opens, so the menu shows live cards instantly instead
+/// of reloading each Komari SPA (JS bundle + WebSocket handshake) every time.
 @MainActor
 final class KomariWebStore: ObservableObject {
     static let shared = KomariWebStore()
 
-    @Published private(set) var contentHeight: CGFloat = 300
+    @Published private(set) var contentHeights: [UUID: CGFloat] = [:]
 
-    static var defaultURL: URL? {
-        URL(string: UserDefaults.standard.string(forKey: "komariBaseURL") ?? "https://komari.fourj.ccwu.cc")
+    private var webViews: [UUID: WKWebView] = [:]
+    private var loadedURLs: [UUID: URL] = [:]
+
+    /// Warm web views at app launch so the first popover open is instant.
+    /// Also evicts views for sites that were removed or disabled.
+    func preload(sites: [KomariSite]) {
+        let validIDs = Set(sites.compactMap { $0.url != nil ? $0.id : nil })
+        for id in webViews.keys where !validIDs.contains(id) {
+            remove(siteID: id)
+        }
+        for site in sites {
+            guard let url = site.url else { continue }
+            _ = webView(siteID: site.id, url: url)
+        }
     }
 
-    private var webView: WKWebView?
-    private var loadedURL: URL?
-
-    /// Warm the web view at app launch so the first popover open is instant.
-    func preload() {
-        guard let url = Self.defaultURL else { return }
-        _ = webView(for: url)
+    func remove(siteID: UUID) {
+        webViews[siteID]?.stopLoading()
+        webViews.removeValue(forKey: siteID)
+        loadedURLs.removeValue(forKey: siteID)
+        contentHeights.removeValue(forKey: siteID)
     }
 
-    func webView(for url: URL) -> WKWebView {
-        if let webView, loadedURL == url { return webView }
+    func webView(siteID: UUID, url: URL) -> WKWebView {
+        if let existing = webViews[siteID], loadedURLs[siteID] == url { return existing }
 
         let config = WKWebViewConfiguration()
 
@@ -47,7 +58,7 @@ final class KomariWebStore: ObservableObject {
         )
 
         let coordinator = Coordinator { [weak self] height in
-            self?.contentHeight = height
+            self?.contentHeights[siteID] = height
         }
         config.userContentController.add(coordinator, name: "komariSize")
 
@@ -56,9 +67,14 @@ final class KomariWebStore: ObservableObject {
         webView.setValue(false, forKey: "drawsBackground")
         webView.load(URLRequest(url: url))
 
-        self.webView = webView
-        loadedURL = url
+        webViews[siteID]?.stopLoading()
+        webViews[siteID] = webView
+        loadedURLs[siteID] = url
         return webView
+    }
+
+    func contentHeight(siteID: UUID) -> CGFloat {
+        contentHeights[siteID] ?? 300
     }
 
     private static let stripChromeCSS = """
@@ -123,12 +139,13 @@ final class KomariWebStore: ObservableObject {
     }
 }
 
-/// Embeds the shared Komari web view (see KomariWebStore).
+/// Embeds one site's shared Komari web view (see KomariWebStore).
 struct KomariWebView: NSViewRepresentable {
+    let siteID: UUID
     let url: URL
 
     func makeNSView(context: Context) -> WKWebView {
-        KomariWebStore.shared.webView(for: url)
+        KomariWebStore.shared.webView(siteID: siteID, url: url)
     }
 
     func updateNSView(_ webView: WKWebView, context: Context) {}

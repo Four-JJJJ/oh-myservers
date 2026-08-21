@@ -2,57 +2,22 @@ import XCTest
 @testable import OhMyServersCore
 
 final class ModelSmokeTests: XCTestCase {
-    func testServerConfigCodableRoundTrip() throws {
-        let s = ServerConfig(
-            id: UUID(),
-            name: "Hong Kong",
-            host: "hk.example.com",
-            port: 22,
-            username: "ubuntu",
-            label: "HK",
-            authMethod: .password,
-            privateKeyPath: nil,
-            isEnabled: true
-        )
-        let data = try JSONEncoder().encode(s)
-        let decoded = try JSONDecoder().decode(ServerConfig.self, from: data)
-        XCTAssertEqual(decoded.host, "hk.example.com")
-        XCTAssertEqual(decoded.label, "HK")
-        XCTAssertEqual(decoded.authMethod, .password)
+    func testKomariSiteCodableRoundTrip() throws {
+        let site = KomariSite(name: "主站", urlString: "https://komari.example.com", isEnabled: false)
+        let data = try JSONEncoder().encode(site)
+        let decoded = try JSONDecoder().decode(KomariSite.self, from: data)
+        XCTAssertEqual(decoded, site)
     }
 
-    func testHealthOfflineWhenUnreachable() {
-        let snap = MetricsSnapshot.unreachable(serverID: UUID(), message: "timeout")
-        XCTAssertEqual(snap.health, .offline)
+    func testKomariSiteDisplayNameFallsBackToHost() {
+        let named = KomariSite(name: "主站", urlString: "https://komari.example.com")
+        XCTAssertEqual(named.displayName, "主站")
+        let unnamed = KomariSite(urlString: "https://komari.example.com")
+        XCTAssertEqual(unnamed.displayName, "komari.example.com")
     }
 
-    func testHealthHighWhenCPUElevated() {
-        let snap = MetricsSnapshot(
-            serverID: UUID(),
-            isReachable: true,
-            cpuPercent: 90
-        )
-        XCTAssertEqual(snap.health, .high)
-    }
-
-    func testHealthHighWhenLoadMeetsCpuCount() {
-        let snap = MetricsSnapshot(
-            serverID: UUID(),
-            isReachable: true,
-            cpuPercent: 10,
-            load1: 4,
-            cpuCount: 2
-        )
-        XCTAssertEqual(snap.health, .high)
-    }
-
-    func testHealthOnlineWhenLoadBelowCpuCount() {
-        let snap = MetricsSnapshot(
-            serverID: UUID(),
-            isReachable: true,
-            load1: 0.5,
-            cpuCount: 2
-        )
-        XCTAssertEqual(snap.health, .online)
+    func testKomariSiteURLValidation() {
+        XCTAssertNotNil(KomariSite(urlString: "https://komari.example.com").url)
+        XCTAssertNil(KomariSite(urlString: "not a url").url)
     }
 }
